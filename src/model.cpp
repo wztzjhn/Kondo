@@ -166,18 +166,21 @@ vec3 Model::displacement(int i, int j) {
 SimpleModel::SimpleModel(int n_sites): Model(n_sites, 2) {
 }
 
-void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
+void SimpleModel::set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_inactive) {
+    assert(spin_inactive.empty() || spin_inactive.size() == spin.size());
     H_elems.clear();
     D_elems.clear();
     
     // Hund coupling
     cx_flt zero = 0;
     for (int i = 0; i < n_sites; i++) {
-        for (int s1 = 0; s1 < 2; s1++) {
-            for (int s2 = 0; s2 < 2; s2++) {
-                cx_flt v = -pauli[s1][s2].dot(flt(J)*spin[i] + zeeman);
-                H_elems.add(2*i+s1, 2*i+s2, &v);
-                D_elems.add(2*i+s1, 2*i+s2, &zero);
+        if (spin_inactive.empty() || !spin_inactive[i]) {
+            for (int s1 = 0; s1 < 2; s1++) {
+                for (int s2 = 0; s2 < 2; s2++) {
+                    cx_flt v = -pauli[s1][s2].dot(flt(J)*spin[i] + zeeman);
+                    H_elems.add(2*i+s1, 2*i+s2, &v);
+                    D_elems.add(2*i+s1, 2*i+s2, &zero);
+                }
             }
         }
     }

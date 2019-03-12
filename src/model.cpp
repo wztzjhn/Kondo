@@ -45,9 +45,11 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
     
     // Site-local forces
     for (int i = 0; i < n_sites; i++) {
-        force[i]   += - 2 * s0 * spin[i];
-        force[i]   += zeeman;
-        force[i].z += 2 * easy_z * spin[i].z;
+        if (spin_exist.empty() || spin_exist[i]) {
+            force[i]   += - 2 * s0 * spin[i];
+            force[i]   += zeeman;
+            force[i].z += 2 * easy_z * spin[i].z;
+        }
     }
     
     // Super-exchange forces
@@ -58,7 +60,9 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
-                    force[i] += - ss[rank] * spin[j];
+                    if (spin_exist.empty() || (spin_exist[i] && spin_exist[j])) {
+                        force[i] += - ss[rank] * spin[j];
+                    }
                 }
             }
         }
@@ -66,6 +70,10 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
     
     // Spin transfer torque
     if (current.norm2() > 0) {
+        if (! spin_exist.empty()) {
+            std::cout << "dilute spin not implemented yet!" << std::endl;
+            assert(false);
+        }
         for (int i = 0; i < n_sites; i++) {
             // -- Build matrix of nearest neighbor displacements
             int nn_rank = 0;
@@ -104,9 +112,11 @@ double Model::energy_classical(Vec<vec3> const& spin) {
     
     // Site-local energy
     for (int i = 0; i < n_sites; i++) {
-        acc += s0 * spin[i].norm2();
-        acc += - zeeman.dot(spin[i]);
-        acc += - easy_z * spin[i].z * spin[i].z;
+        if (spin_exist.empty() || spin_exist[i]) {
+            acc += s0 * spin[i].norm2();
+            acc += - zeeman.dot(spin[i]);
+            acc += - easy_z * spin[i].z * spin[i].z;
+        }
     }
     
     // Super-exchange energy
@@ -117,7 +127,9 @@ double Model::energy_classical(Vec<vec3> const& spin) {
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
-                    acc += ss[rank] * spin[i].dot(spin[j]) / 2; // adjust for double counting
+                    if (spin_exist.empty() || (spin_exist[i] && spin_exist[j])) {
+                        acc += ss[rank] * spin[i].dot(spin[j]) * 0.5; // adjust for double counting
+                    }
                 }
             }
         }

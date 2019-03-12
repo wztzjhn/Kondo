@@ -1,6 +1,7 @@
 #include "kondo.h"
 #include "iostream_util.h"
 
+#include <algorithm>
 #include <climits>
 #include <cstdint>
 #include <sstream>
@@ -42,6 +43,23 @@ void deserialize_from_hex(std::istream& is, T& data) {
     }
 }
 
+void randomize_spin_exist(Vec<bool> &spin_exist, int num_sites, int num_spins, unsigned seed) {
+    assert(num_spins > 0 && num_spins <= num_sites);
+    if (num_sites == num_spins) {
+        spin_exist.clear();
+    } else {
+        spin_exist.assign(num_sites, false);
+        std::vector<int> sites_active(num_sites);
+        for (int i = 0; i < num_sites; i++) sites_active[i] = i;
+        std::shuffle(sites_active.begin(), sites_active.end(), std::mt19937(seed));
+        std::cout << "Sites for dilute spins: ";
+        for (int i = 0; i < num_spins; i++) {
+            spin_exist[sites_active[i]] = true;
+            std::cout << sites_active[i] << ",";
+        }
+        std::cout << std::endl;
+    }
+}
 
 std::unique_ptr<Model> mk_model(const toml_ptr g) {
     std::unique_ptr<Model> ret;
@@ -203,9 +221,14 @@ int main(int argc, char *argv[]) {
     Vec<double> gamma;
     double energy;
     
+    // total number of sites where local spins exist
+    int n_spins = toml_get<int64_t>(g, "model.n_spins", m->n_sites);
+    Vec<bool> spin_exist;
+    randomize_spin_exist(spin_exist, m->n_sites, n_spins, toml_get<int64_t>(g, "random_seed"));
+    
     // assumes random vectors R have been set appropriately
     auto build_kpm = [&](Vec<vec3> const& spin, int M, int Mq) {
-        m->set_hamiltonian(spin);
+        m->set_hamiltonian(spin, spin_exist);
         es = (ges.lo < ges.hi) ? ges : engine->energy_scale(m->H, lanczos_extend, lanczos_iters);
         engine->set_H(m->H, es);
         moments = engine->moments(M);

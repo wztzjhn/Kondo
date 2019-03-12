@@ -31,8 +31,9 @@ int MostovoyModel::p_idx(int i, int b, int sigma) {
 }
 
 
-void MostovoyModel::set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_inactive) {
-    assert(spin_inactive.empty());
+void MostovoyModel::set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_exist_) {
+    assert(spin_exist_.empty() || spin_exist_.size() == spin.size());
+    spin_exist = spin_exist_;
     H_elems.clear();
     D_elems.clear();
     

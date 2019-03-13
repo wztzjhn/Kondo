@@ -243,11 +243,22 @@ int main(int argc, char *argv[]) {
         }
         auto c = expansion_coefficients(M, Mq, std::bind(fkpm::fermi_energy, std::placeholders::_1, m->kT(), mu), es);
         engine->autodiff_matrix(c, m->D);
+        return energy;
     };
     
     auto calc_force = [&](Vec<vec3> const& spin, Vec<vec3>& force) {
         build_kpm(spin, M, Mq);
         m->set_forces(m->D, spin, force);
+        return 0.0;
+    };
+    
+    auto calc_Ediff = [&](Vec<vec3> const& spin0, Vec<vec3>& spin1) {
+        // Factor-of-2 slower than optimal writing here.
+        // Since MonteCarlo is mainly for benchmarking in this code,
+        // we will postpone the optimization in future developments.
+        double e0 = build_kpm(spin0, M, Mq);
+        double e1 = build_kpm(spin1, M, Mq);
+        return e1 - e0;
     };
     
     auto dump = [&](int step) {

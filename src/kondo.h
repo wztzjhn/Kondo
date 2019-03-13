@@ -127,7 +127,7 @@ public:
 
 class Dynamics {
 public:
-    typedef std::function<void(Vec<vec3> const& spin, Vec<vec3>& force)> CalcForce;
+    typedef std::function<double(Vec<vec3> const& spin, Vec<vec3>& force)> CalcForce;
     int n_steps = 0;
     double dt;
     
@@ -155,6 +155,9 @@ public:
     //   P.-W. Ma and S. L. Dudarev, Phys. Rev. B 86, 054416 (2012)
     // Spin magnitude is *not* conserved
     static std::unique_ptr<Dynamics> mk_glsd(double alpha, double dt);
+    
+    // Simple Metropolis update
+    static std::unique_ptr<Dynamics> mk_metropolis(const Model& m);
     
     virtual void init(CalcForce const& calc_force, fkpm::RNG& rng, Model& m) {}
     virtual void step(CalcForce const& calc_force, fkpm::RNG& rng, Model& m) = 0;

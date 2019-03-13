@@ -129,6 +129,8 @@ std::unique_ptr<Dynamics> mk_dynamics(const toml_ptr g) {
         return Dynamics::mk_gjf(toml_get<double>(g, "dynamics.alpha"), dt);
     } else if (type == "glsd") {
         return Dynamics::mk_glsd(toml_get<double>(g, "dynamics.alpha"), dt);
+    } else if (type == "metropolis") {
+        return Dynamics::mk_metropolis();
     }
     
     cerr << "Unsupported dynamics type `" << type << "`!\n";
@@ -243,7 +245,6 @@ int main(int argc, char *argv[]) {
         }
         auto c = expansion_coefficients(M, Mq, std::bind(fkpm::fermi_energy, std::placeholders::_1, m->kT(), mu), es);
         engine->autodiff_matrix(c, m->D);
-        return energy;
     };
     
     auto calc_force = [&](Vec<vec3> const& spin, Vec<vec3>& force) {
@@ -256,8 +257,11 @@ int main(int argc, char *argv[]) {
         // Factor-of-2 slower than optimal writing here.
         // Since MonteCarlo is mainly for benchmarking in this code,
         // we will postpone the optimization in future developments.
-        double e0 = build_kpm(spin0, M, Mq);
-        double e1 = build_kpm(spin1, M, Mq);
+        double e0, e1;
+        build_kpm(spin0, M, Mq);
+        e0 = energy;
+        build_kpm(spin1, M, Mq);
+        e1 = energy;
         return e1 - e0;
     };
     
@@ -397,7 +401,7 @@ int main(int argc, char *argv[]) {
     while (dynamics->n_steps < max_steps) {
         engine->set_R_correlated(groups, rng);
         dynamics->step(calc_force, rng, *m);
-        if (dynamics->n_steps % steps_per_dump == 0) {
+        if (dynamics->n_steps % steps_per_dump == 0 && dynamics->dt > 0.0) {
             dump(dynamics->n_steps);
         }
     }

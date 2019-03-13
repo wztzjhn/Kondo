@@ -263,36 +263,25 @@ std::unique_ptr<Dynamics> Dynamics::mk_glsd(double alpha, double dt) {
 
 
 class Metropolis : public Dynamics {
-private:
-    std::uniform_real_distribution<double> dist;                                // [0,1]
-    
-    // site indices which are allowed to be updated
-    std::vector<int> allow_update;
 public:
     int n_substeps = 0;
     
-    Metropolis(const Model& m) {
-        assert(m.spin_exist.empty() || m.spin_exist.size() == m.n_sites);
-        dist = std::uniform_real_distribution<double>(0.0, 1.0);
-        allow_update.clear();
-        for (int i = 0; i < m.n_sites; i++) {
-            if (m.spin_exist.empty() || m.spin_exist[i]) allow_update.push_back(i);
-        }
-    }
+    Metropolis() { dt = -1.0; }
     
     void step(CalcForce const& calc_Ediff, fkpm::RNG& rng, Model& m) {
         Vec<vec3>& s    = m.spin;
         Vec<vec3>& sp   = m.dyn_stor[0];
         sp = s;
         
-        int N = static_cast<int>(allow_update.size());
+        int N = static_cast<int>(m.allow_update.size());
         assert(N > 0 && N <= m.n_sites);
         std::uniform_int_distribution<int> dist_int(0,N-1);                     // {0,1,2,...,N-1}
-        int site = allow_update[dist_int(rng)];
+        int site = m.allow_update[dist_int(rng)];
         assert(site >= 0 && site < m.n_sites);
         assert(m.spin_exist.empty() || m.spin_exist[site]);
         
         // generate a random spin in S^2 space, c.f. D. Landau's book
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
         double zeta1,zeta2;
         double zeta_square = 10.0;
         while (zeta_square >= 1.0) {
@@ -316,10 +305,13 @@ public:
         if (n_substeps >= N) {
             n_substeps = 0;
             n_steps++;
+            dt = 1.0;
+        } else {
+            dt = -1.0;
         }
         m.time = static_cast<double>(n_steps);
     }
 };
-std::unique_ptr<Dynamics> Dynamics::mk_metropolis(const Model& m) {
-    return std::make_unique<Metropolis>(m);
+std::unique_ptr<Dynamics> Dynamics::mk_metropolis() {
+    return std::make_unique<Metropolis>();
 }

@@ -59,7 +59,8 @@ public:
     fkpm::SpMatElems<cx_flt> H_elems, D_elems;
     fkpm::SpMatBsr<cx_flt> H, D;
     Vec<vec3> spin;
-    Vec<bool> spin_exist;  // true if local spin exists on a given site; if empty, all sites occupied
+    Vec<bool> spin_exist;          // true if local spin exists on a given site; if empty, all sites occupied
+    std::vector<int> allow_update; // site indices for sites which have local spins
     double time = 0;
     Vec<vec3> dyn_stor[5]; // used by Dynamics to store intermediate data between steps
     
@@ -157,7 +158,7 @@ public:
     static std::unique_ptr<Dynamics> mk_glsd(double alpha, double dt);
     
     // Simple Metropolis update
-    static std::unique_ptr<Dynamics> mk_metropolis(const Model& m);
+    static std::unique_ptr<Dynamics> mk_metropolis();
     
     virtual void init(CalcForce const& calc_force, fkpm::RNG& rng, Model& m) {}
     virtual void step(CalcForce const& calc_force, fkpm::RNG& rng, Model& m) = 0;

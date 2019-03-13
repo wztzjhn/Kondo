@@ -181,6 +181,11 @@ SimpleModel::SimpleModel(int n_sites): Model(n_sites, 2) {
 void SimpleModel::set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_exist_) {
     assert(spin_exist_.empty() || spin_exist_.size() == spin.size());
     spin_exist = spin_exist_;
+    allow_update.clear();
+    for (int i = 0; i < n_sites; i++) {
+        if (spin_exist.empty() || spin_exist[i]) allow_update.push_back(i);
+    }
+    
     H_elems.clear();
     D_elems.clear();
     

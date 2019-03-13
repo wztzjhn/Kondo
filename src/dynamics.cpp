@@ -305,9 +305,9 @@ public:
         if (n_substeps >= N) {
             n_substeps = 0;
             n_steps++;
-            dt = 1.0;
-        } else {
             dt = -1.0;
+        } else {
+            dt = -10.0;
         }
         m.time = static_cast<double>(n_steps);
     }

@@ -395,14 +395,25 @@ int main(int argc, char *argv[]) {
         dump(dynamics->n_steps);
         
         engine->set_R_correlated(groups, rng);
-        dynamics->init(calc_force, rng, *m);
+        if (dynamics->dt > 0.0) {
+            dynamics->init(calc_force, rng, *m);
+        } else {
+            dynamics->init(calc_Ediff, rng, *m);
+        }
     }
     
     while (dynamics->n_steps < max_steps) {
         engine->set_R_correlated(groups, rng);
-        dynamics->step(calc_force, rng, *m);
-        if (dynamics->n_steps % steps_per_dump == 0 && dynamics->dt > 0.0) {
-            dump(dynamics->n_steps);
+        if (dynamics->dt > 0.0) {
+            dynamics->step(calc_force, rng, *m);
+            if (dynamics->n_steps % steps_per_dump == 0) {
+                dump(dynamics->n_steps);
+            }
+        } else {
+            dynamics->step(calc_Ediff, rng, *m);
+            if (dynamics->n_steps % steps_per_dump == 0 && dynamics->dt > -5.0) {
+                dump(dynamics->n_steps);
+            }
         }
     }
     std::cout << "Reached max_steps value = " << max_steps << ".\n";

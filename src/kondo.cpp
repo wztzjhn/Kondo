@@ -172,6 +172,13 @@ void read_state_from_dump(boost::filesystem::path const& dump_dir, fkpm::RNG &rn
     assert(data.size() == 3*m.n_sites);
     for (int i = 0; i < m.n_sites; i++) {
         m.spin[i] = {data[3*i+0], data[3*i+1], data[3*i+2]};
+        if (m.spin_exist.empty() || m.spin_exist[i]) {
+            assert(m.spin[i].norm2() > 1e-10);
+        } else {
+            assert(m.spin[i].norm2() < 1e-10);
+            // put (0,0,1) when running, to avoid potential normalization error
+            m.spin[i] = {0.0, 0.0, 1.0};
+        }
     }
     
     // Read n_steps
@@ -326,9 +333,15 @@ int main(int argc, char *argv[]) {
         // classical magnetic moments
         dump_file << "\"spin\":[";
         for (int i = 0; i < m->n_sites; i++) {
-            dump_file << m->spin[i].x << ",";
-            dump_file << m->spin[i].y << ",";
-            dump_file << m->spin[i].z;
+            if (m->spin_exist.empty() || m->spin_exist[i]) {
+                dump_file << m->spin[i].x << ",";
+                dump_file << m->spin[i].y << ",";
+                dump_file << m->spin[i].z;
+            } else {
+                dump_file << 0.0 << ",";
+                dump_file << 0.0 << ",";
+                dump_file << 0.0;
+            }
             if (i < m->n_sites-1) dump_file << ",";
         }
         dump_file << "]\n";

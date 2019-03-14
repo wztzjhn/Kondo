@@ -70,7 +70,7 @@ public:
     static void set_spins_random(fkpm::RNG& rng, Vec<vec3>& spin);
     double kT();
     
-    virtual void set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_exist_ = Vec<bool>()) = 0;
+    virtual void set_hamiltonian(Vec<vec3> const& spin) = 0;
     virtual void set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, Vec<vec3>& force);
     virtual double energy_classical(Vec<vec3> const& spin);
     virtual fkpm::SpMatBsr<cx_flt> electric_current_operator(Vec<vec3> const& spin, vec3 dir) = 0;
@@ -91,7 +91,7 @@ public:
     
     SimpleModel(int n_sites);
     
-    void set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_exist_ = Vec<bool>());
+    void set_hamiltonian(Vec<vec3> const& spin);
     void set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, Vec<vec3>& force);
     fkpm::SpMatBsr<cx_flt> electric_current_operator(Vec<vec3> const& spin, vec3 dir);
     
@@ -114,7 +114,7 @@ public:
     
     MostovoyModel(int lx, int ly, int lz);
     
-    void set_hamiltonian(Vec<vec3> const& spin, Vec<bool> const& spin_exist_ = Vec<bool>());
+    void set_hamiltonian(Vec<vec3> const& spin);
     void set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, Vec<vec3>& force);
     fkpm::SpMatBsr<cx_flt> electric_current_operator(Vec<vec3> const& spin, vec3 dir);
     

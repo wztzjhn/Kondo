@@ -43,24 +43,6 @@ void deserialize_from_hex(std::istream& is, T& data) {
     }
 }
 
-void randomize_spin_exist(Vec<bool> &spin_exist, int num_sites, int num_spins, unsigned seed) {
-    assert(num_spins > 0 && num_spins <= num_sites);
-    if (num_sites == num_spins) {
-        spin_exist.clear();
-    } else {
-        spin_exist.assign(num_sites, false);
-        std::vector<int> sites_active(num_sites);
-        for (int i = 0; i < num_sites; i++) sites_active[i] = i;
-        std::shuffle(sites_active.begin(), sites_active.end(), std::mt19937(seed));
-        std::cout << "Sites for dilute spins: ";
-        for (int i = 0; i < num_spins; i++) {
-            spin_exist[sites_active[i]] = true;
-            std::cout << sites_active[i] << ",";
-        }
-        std::cout << std::endl;
-    }
-}
-
 std::unique_ptr<Model> mk_model(const toml_ptr g) {
     std::unique_ptr<Model> ret;
     auto type = toml_get<std::string>(g, "model.type");
@@ -113,6 +95,32 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
     ret->s1       = toml_get<double>(g, "model.s1", 0);
     ret->s2       = toml_get<double>(g, "model.s2", 0);
     ret->s3       = toml_get<double>(g, "model.s3", 0);
+    
+    // setup dilute spin positions
+    int num_sites = ret->n_sites;
+    int num_spins = toml_get<int64_t>(g, "model.n_spins", num_sites);
+    auto& spin_exist = ret->spin_exist;
+    assert(num_spins > 0 && num_spins <= num_sites);
+    if (num_sites == num_spins) {
+        spin_exist.clear();
+    } else {
+        spin_exist.assign(num_sites, false);
+        std::vector<int> sites_active(num_sites);
+        for (int i = 0; i < num_sites; i++) sites_active[i] = i;
+        std::shuffle(sites_active.begin(), sites_active.end(),
+                     std::mt19937(toml_get<int64_t>(g, "random_seed")));
+        std::cout << "Sites for dilute spins: ";
+        for (int i = 0; i < num_spins; i++) {
+            spin_exist[sites_active[i]] = true;
+            std::cout << sites_active[i] << ",";
+        }
+        std::cout << std::endl;
+    }
+    ret->allow_update.clear();
+    for (int i = 0; i < num_sites; i++) {
+        if (spin_exist.empty() || spin_exist[i]) ret->allow_update.push_back(i);
+    }
+    
     return ret;
 }
 
@@ -223,14 +231,9 @@ int main(int argc, char *argv[]) {
     Vec<double> gamma;
     double energy;
     
-    // total number of sites where local spins exist
-    int n_spins = toml_get<int64_t>(g, "model.n_spins", m->n_sites);
-    Vec<bool> spin_exist;
-    randomize_spin_exist(spin_exist, m->n_sites, n_spins, toml_get<int64_t>(g, "random_seed"));
-    
     // assumes random vectors R have been set appropriately
     auto build_kpm = [&](Vec<vec3> const& spin, int M, int Mq) {
-        m->set_hamiltonian(spin, spin_exist);
+        m->set_hamiltonian(spin);
         es = (ges.lo < ges.hi) ? ges : engine->energy_scale(m->H, lanczos_extend, lanczos_iters);
         engine->set_H(m->H, es);
         moments = engine->moments(M);

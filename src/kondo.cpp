@@ -152,6 +152,14 @@ void read_state_from_dump(boost::filesystem::path const& dump_dir, fkpm::RNG &rn
         if (std::regex_match(q.path().filename().string(), std::regex("dump[[:digit:]]+\\.json"))) v.push_back(q);
     }
     std::sort(v.begin(), v.end());
+    if (v.size() > 1) {
+        auto num_lines = [] (const boost::filesystem::path &p) {
+            boost::filesystem::ifstream file(p);
+            return std::count(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), '\n');
+        };
+        // in case last dump file not recorded correctly (e.g. due to walltime)
+        if (num_lines(v.back()) != num_lines(*(v.rbegin()+1)) ) v.pop_back();
+    }
     boost::filesystem::ifstream is(v.back());
     boost::property_tree::ptree pt;
     boost::property_tree::read_json (is, pt);

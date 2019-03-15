@@ -98,21 +98,21 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
     
     // setup dilute spin positions
     int num_sites = ret->n_sites;
-    int num_spins = toml_get<int64_t>(g, "model.n_spins", num_sites);
+    double filling_spins = toml_get<double>(g, "model.filling_spins", 1.0);
     auto& spin_exist = ret->spin_exist;
-    assert(num_spins > 0 && num_spins <= num_sites);
-    if (num_sites == num_spins) {
+    assert(filling_spins > 0.0 && filling_spins <= 1.0);
+    if (std::abs(filling_spins-1.0) < 1e-10) {
         spin_exist.clear();
     } else {
         spin_exist.assign(num_sites, false);
-        std::vector<int> sites_active(num_sites);
-        for (int i = 0; i < num_sites; i++) sites_active[i] = i;
-        std::shuffle(sites_active.begin(), sites_active.end(),
-                     std::mt19937(toml_get<int64_t>(g, "random_seed")));
-        std::cout << "Sites for dilute spins: ";
-        for (int i = 0; i < num_spins; i++) {
-            spin_exist[sites_active[i]] = true;
-            std::cout << sites_active[i] << ",";
+        auto rng_spin = std::mt19937(toml_get<int64_t>(g, "random_seed"));
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        std::cout << "Sites for dilute spins: " << std::endl;
+        for (int i = 0; i < num_sites; i++) {
+            if (dist(rng_spin) < filling_spins) {
+                spin_exist[i] = true;
+                std::cout << i << ",";
+            }
         }
         std::cout << std::endl;
     }
@@ -120,7 +120,9 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
     for (int i = 0; i < num_sites; i++) {
         if (spin_exist.empty() || spin_exist[i]) ret->allow_update.push_back(i);
     }
-    
+    std::cout << "spin concentration input:    " << filling_spins << std::endl;
+    std::cout << "spin concentration realized: "
+              << static_cast<double>(ret->allow_update.size()) / num_sites << std::endl;
     return ret;
 }
 

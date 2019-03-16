@@ -101,13 +101,13 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
     double filling_spins = toml_get<double>(g, "model.filling_spins", 1.0);
     auto& spin_exist = ret->spin_exist;
     assert(filling_spins > 0.0 && filling_spins <= 1.0);
-    if (std::abs(filling_spins-1.0) < 1e-10) {
+    if (std::abs(filling_spins-1.0) < 1e-10) {                                  // every site occupied
         spin_exist.clear();
-    } else {
+    } else {                                                                    // some sites empty
         spin_exist.assign(num_sites, false);
         auto rng_spin = std::mt19937(toml_get<int64_t>(g, "random_seed"));
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        std::cout << "Sites for dilute spins: " << std::endl;
+        std::cout << "Sites occupied by spins: " << std::endl;
         for (int i = 0; i < num_sites; i++) {
             if (dist(rng_spin) < filling_spins) {
                 spin_exist[i] = true;
@@ -160,7 +160,10 @@ void read_state_from_dump(boost::filesystem::path const& dump_dir, fkpm::RNG &rn
             return std::count(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), '\n');
         };
         // in case last dump file not recorded correctly (e.g. due to walltime)
-        if (num_lines(v.back()) != num_lines(*(v.rbegin()+1)) ) v.pop_back();
+        if (num_lines(v.back()) != num_lines(*(v.rbegin()+1)) ) {
+            boost::filesystem::remove(v.back());
+            v.pop_back();
+        }
     }
     boost::filesystem::ifstream is(v.back());
     boost::property_tree::ptree pt;

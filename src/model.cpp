@@ -227,6 +227,7 @@ void SimpleModel::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& s
     
     // Hund-coupling forces
     for (int i = 0; i < n_sites; i++) {
+        if (!spin_exist.empty() && !spin_exist[i]) continue;
         Vec3<cx_flt> dE_dS(0, 0, 0);
         for (int s1 = 0; s1 < 2; s1 ++) {
             for (int s2 = 0; s2 < 2; s2 ++) {

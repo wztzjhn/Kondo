@@ -266,11 +266,15 @@ class Metropolis : public Dynamics {
 public:
     int n_substeps = 0;
     
+    // dt is set to -1 (when n_substeps==0) or -10 (when n_substeps!=0).
+    // the purpose of using dt here is two-fold:
+    // 1. dt < 0 let other parts of the code know that dynamics is MC type;
+    // 2. tell if a full sweep is just finished (-1 v.s. -10).
     Metropolis() { dt = -1.0; }
     
     void step(CalcForce const& calc_Ediff, fkpm::RNG& rng, Model& m) {
-        Vec<vec3>& s    = m.spin;
-        Vec<vec3>& sp   = m.dyn_stor[0];
+        Vec<vec3>& s  = m.spin;
+        Vec<vec3>& sp = m.dyn_stor[0];
         sp = s;
         
         int N = static_cast<int>(m.allow_update.size());
@@ -309,7 +313,7 @@ public:
         } else {
             dt = -10.0;
         }
-        m.time = static_cast<double>(n_steps);
+        m.time = n_steps + static_cast<double>(n_substeps) / N;
     }
 };
 std::unique_ptr<Dynamics> Dynamics::mk_metropolis() {

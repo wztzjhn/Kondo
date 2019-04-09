@@ -104,7 +104,7 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
 }
 
 void conductivity(int argc, char *argv[]) {
-    auto engine = fkpm::mk_engine<cx_flt>();
+    auto engine = fkpm::mk_engine_mpi<cx_flt>();
     if (engine == nullptr) std::exit(EXIT_FAILURE);
     if (argc != 2) {
         cout << "Usage: " << argv[0] << " <base_dir>\n";
@@ -252,8 +252,6 @@ void conductivity(int argc, char *argv[]) {
           << std::endl;
     fout3.close();
     std::cout << std::endl;
-    std::remove("dump_device0.dat");
-    std::remove("dump_device1.dat");
 }
 
 

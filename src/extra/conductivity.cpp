@@ -212,45 +212,47 @@ void conductivity(int argc, char *argv[]) {
     cout << " done. " << fkpm::timer[0].measure() << "s.\n";
     
     cout << "calculating dc conductivities... " << std::flush;
-    std::ofstream fout2("full_time"+std::to_string(time)+"_M"+std::to_string(M)+
-                        "_color"+std::to_string(n_colors)+"_seed"+std::to_string(seed)+".dat", std::ios::out);
-    fout2 << std::scientific << std::right;
-    fout2 << std::setw(20) << "#(1)" << std::setw(20) << "(2)" << std::setw(20) << "(3)" << std::endl;
-    fout2 << std::setw(20) << "mu" << std::setw(20) << "rho" << std::setw(20) << "sigma" << std::endl;
+    std::ofstream fout_full("full_time"+std::to_string(time)+"_M"+std::to_string(M)+
+                            "_color"+std::to_string(n_colors)+"_seed"+std::to_string(seed)+".dat", std::ios::out);
+    fout_full << std::scientific << std::right;
+    fout_full << std::setw(20) << "#(1)" << std::setw(20) << "(2)" << std::setw(20) << "(3)" << std::endl;
+    fout_full << std::setw(20) << "mu" << std::setw(20) << "rho" << std::setw(20) << "sigma" << std::endl;
     int interval = std::max(Mq/400,5);
     for (int i = 0; i < Mq; i+=interval) {
         auto cmn = electrical_conductivity_coefficients(M, Mq, m->kT(), mu_list[i], 0.0, es, kernel);
         auto sigma = std::real(fkpm::moment_product(cmn, moments_sigma));
-        fout2 << std::setw(20) << mu_list[i]
-              << std::setw(20) << rho[i]
-              << std::setw(20) << sigma << std::endl;
+        fout_full << std::setw(20) << mu_list[i]
+                  << std::setw(20) << rho[i]
+                  << std::setw(20) << sigma << std::endl;
     }
-    fout2.close();
-    cout << " done. " << fkpm::timer[0].measure() << "s.\n";
+    fout_full.close();
+    std::cout << " done. " << fkpm::timer[0].measure() << "s.\n";
     
-    std::ifstream fin0("result_time"+std::to_string(time)+".dat");
+    std::ifstream fin0("conductivity_KPM.dat");
     if (! fin0.good()) {
         fin0.close();
-        std::ofstream fout3("result_time"+std::to_string(time)+".dat", std::ios::out | std::ios::app );
-        fout3 << std::setw(20) << "#(1)" << std::setw(20) << "(2)"
-              << std::setw(20) <<  "(3)" << std::setw(20) << "(4)"
-              << std::setw(20) <<  "(5)" << std::setw(20) << "(6)" << std::endl;
-        fout3 << std::setw(20) << "M"    << std::setw(20) << "colors"
-              << std::setw(20) << "seed" << std::setw(20) << "F"
-              << std::setw(20) << "mu"   << std::setw(20) << "sigma" << std::endl;
-        fout3.close();
+        std::ofstream fout("conductivity_KPM.dat", std::ios::out | std::ios::app );
+        fout << std::setw(20) << "#(1)"   << std::setw(20) << "(2)"
+             << std::setw(20) << "(3)"    << std::setw(20) << "(4)"
+             << std::setw(20) << "(5)"    << std::setw(20) << "(6)"
+             << std::setw(20) << "(7)"    << std::endl;
+        fout << std::setw(20) << "time"   << std::setw(20) << "M"
+             << std::setw(20) << "colors" << std::setw(20) << "seed"
+             << std::setw(20) << "F"      << std::setw(20) << "mu"
+             << std::setw(20) << "sigma"  << std::endl;
+        fout.close();
     }
-    std::ofstream fout3("result_time"+std::to_string(time)+".dat", std::ios::out | std::ios::app );
-    fout3 << std::scientific << std::right;
+    std::ofstream fout("conductivity_KPM.dat", std::ios::out | std::ios::app );
+    fout << std::scientific << std::right;
     auto cmn = electrical_conductivity_coefficients(M, Mq, m->kT(), mu, 0.0, es, kernel);
 
-    fout3 << std::setw(20) << M << std::setw(20) << n_colors
-          << std::setw(20) << seed
-          << std::setw(20) << fkpm::electronic_energy(gamma, es, m->kT(), filling, mu)/m->n_sites
-          << std::setw(20) << mu
-          << std::setw(20) << std::real(fkpm::moment_product(cmn, moments_sigma))
-          << std::endl;
-    fout3.close();
+    fout << std::setw(20) << time     << std::setw(20) << M
+         << std::setw(20) << n_colors << std::setw(20) << seed
+         << std::setw(20) << fkpm::electronic_energy(gamma, es, m->kT(), filling, mu)/m->n_sites
+         << std::setw(20) << mu
+         << std::setw(20) << std::real(fkpm::moment_product(cmn, moments_sigma))
+         << std::endl;
+    fout.close();
     std::cout << std::endl;
 }
 

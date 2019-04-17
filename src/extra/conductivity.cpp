@@ -430,5 +430,6 @@ void conductivity_ED(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-    conductivity(argc, argv);
+    conductivity_KPM(argc, argv);
+    //conductivity_ED(argc, argv);
 }

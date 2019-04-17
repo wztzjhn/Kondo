@@ -105,6 +105,9 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
 }
 
 void conductivity_KPM(int argc, char *argv[]) {
+    std::cout << "-----------------------------------------------------------------------" << std::endl;
+    std::cout << "Sign of sigma_xy from this KPM code could be reversed, check in future." << std::endl;
+    std::cout << "-----------------------------------------------------------------------" << std::endl;
     auto engine = fkpm::mk_engine_mpi<cx_flt>();
     if (engine == nullptr) std::exit(EXIT_FAILURE);
     if (argc != 2) {
@@ -396,15 +399,14 @@ void conductivity_ED(int argc, char *argv[]) {
         double e2 = eigval(j);
         for (int i = 0; i < eigval.n_elem; i++) {
             double e1 = eigval(i);
-            double temp_square = std::real(arma::cdot(vec1_temp,eigvec.col(i)) * arma::cdot(eigvec.col(i),vec2_temp));
+            std::complex<double> temp_square = arma::cdot(vec1_temp,eigvec.col(i)) * arma::cdot(eigvec.col(i),vec2_temp);
             double temp_deriv;
             if (std::abs(e1-e2) > 1e-6) {
                 temp_deriv = -(fkpm::fermi_density(e1, m->kT(), mu) - fkpm::fermi_density(e2, m->kT(), mu))/(e1 - e2);
             } else {
                 temp_deriv = -fermi_deriv(e1, m->kT(), mu);
             }
-            double temp_e12 = (e1-e2)*(e1-e2);
-            sigma_L1_temp += temp_square * temp_deriv * eta / (temp_e12 + eta*eta);
+            sigma_L1_temp += temp_deriv * std::real(temp_square / std::complex<double>(eta, e1-e2));
         }
         sigma_L1 += sigma_L1_temp;
     }

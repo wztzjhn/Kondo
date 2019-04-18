@@ -362,20 +362,20 @@ void conductivity_ED(int argc, char *argv[]) {
         return -b / ( (b + 1.0) * (b + 1.0) * temperature );
     };
 
-    double eta;       // eta = min(1/lx, 1/ly, 1/lz)
+    double eta_1d0;       // eta_1d0 = min(1/lx, 1/ly, 1/lz)
     int L[3];
     switch (dim) {
         case 1:
             L[0] = toml_get<int64_t>(g, "model.w");
             std::cout << "lx = " << L[0] << std::endl;
-            eta = 1.0 / L[0];
+            eta_1d0 = 1.0 / L[0];
             break;
         case 2:
             L[0] = toml_get<int64_t>(g, "model.w");
             L[1] = toml_get<int64_t>(g, "model.h");
             std::cout << "lx = " << L[0] << std::endl;
             std::cout << "ly = " << L[1] << std::endl;
-            eta = 1.0 / std::max(L[0], L[1]);
+            eta_1d0 = 1.0 / std::max(L[0], L[1]);
             break;
         case 3:
             L[0] = toml_get<int64_t>(g, "model.lx");
@@ -384,16 +384,20 @@ void conductivity_ED(int argc, char *argv[]) {
             std::cout << "lx = " << L[0] << std::endl;
             std::cout << "ly = " << L[1] << std::endl;
             std::cout << "lz = " << L[2] << std::endl;
-            eta = 1.0 / std::max(std::max(L[0],L[1]),L[2]);
+            eta_1d0 = 1.0 / std::max(std::max(L[0],L[1]),L[2]);
             break;
     }
-    std::cout << "eta = " << eta << std::endl;
+    std::cout << "eta_1d0 = " << eta_1d0 << std::endl;
 
     // calculate conductivity
     std::cout << "Evaluating Kubo formula with ED... " << std::flush;
-    double sigma_L1 = 0.0;
+    double sigma_0d5 = 0.0;
+    double sigma_1d0 = 0.0;
+    double sigma_2d0 = 0.0;
     for (int j = 0; j < eigval.n_elem; j++) {
-        double sigma_L1_temp = 0.0;
+        double sigma_0d5_temp = 0.0;
+        double sigma_1d0_temp = 0.0;
+        double sigma_2d0_temp = 0.0;
         arma::cx_fvec vec1_temp = j1_arma*eigvec.col(j);
         arma::cx_fvec vec2_temp = j2_arma*eigvec.col(j);
         double e2 = eigval(j);
@@ -406,27 +410,37 @@ void conductivity_ED(int argc, char *argv[]) {
             } else {
                 temp_deriv = -fermi_deriv(e1, m->kT(), mu);
             }
-            sigma_L1_temp += temp_deriv * std::real(temp_square / std::complex<double>(eta, e1-e2));
+            sigma_0d5_temp += temp_deriv * std::real(temp_square / std::complex<double>(0.5*eta_1d0, e1-e2));
+            sigma_1d0_temp += temp_deriv * std::real(temp_square / std::complex<double>(    eta_1d0, e1-e2));
+            sigma_2d0_temp += temp_deriv * std::real(temp_square / std::complex<double>(2.0*eta_1d0, e1-e2));
         }
-        sigma_L1 += sigma_L1_temp;
+        sigma_0d5 += sigma_0d5_temp;
+        sigma_1d0 += sigma_1d0_temp;
+        sigma_2d0 += sigma_2d0_temp;
     }
     std::cout << " done. " << fkpm::timer[0].measure() << "s.\n";
+    std::cout << "sigma_0d5: " << sigma_0d5 << std::endl;
+    std::cout << "sigma_1d0: " << sigma_1d0 << std::endl;
+    std::cout << "sigma_2d0: " << sigma_2d0 << std::endl;
 
     std::ifstream fin0("conductivity_ED.dat");
     if (! fin0.good()) {
         fin0.close();
         std::ofstream fout("conductivity_ED.dat", std::ios::out | std::ios::app );
-        fout << std::setw(20) << "#(1)" << std::setw(20) << "(2)"
-             << std::setw(20) <<  "(3)" << std::setw(20) << "(4)"   << std::endl;
-        fout << std::setw(20) << "time" << std::setw(20) << "kT"
-             << std::setw(20) << "mu"   << std::setw(20) << "sigma_L1" << std::endl;
+        fout << std::setw(20) << "#(1)"      << std::setw(20) << "(2)"
+             << std::setw(20) <<  "(3)"      << std::setw(20) << "(4)"
+             << std::setw(20) <<  "(5)"      << std::setw(20) << "(6)"       << std::endl;
+        fout << std::setw(20) << "time"      << std::setw(20) << "kT"
+             << std::setw(20) << "mu"        << std::setw(20) << "sigma_0d5"
+             << std::setw(20) << "sigma_1d0" << std::setw(20) << "sigma_2d0" << std::endl;
         fout.close();
     }
     std::ofstream fout("conductivity_ED.dat", std::ios::out | std::ios::app );
     fout << std::scientific << std::right;
 
-    fout << std::setw(20) << time << std::setw(20) << m->kT()
-         << std::setw(20) << mu   << std::setw(20) << sigma_L1   << std::endl;
+    fout << std::setw(20) << time      << std::setw(20) << m->kT()
+         << std::setw(20) << mu        << std::setw(20) << sigma_0d5
+         << std::setw(20) << sigma_1d0 << std::setw(20) << sigma_2d0 << std::endl;
     fout.close();
     std::cout << std::endl;
 }

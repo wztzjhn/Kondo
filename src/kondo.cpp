@@ -105,7 +105,8 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
         spin_exist.clear();
     } else {                                                                    // some sites empty
         spin_exist.assign(num_sites, false);
-        auto rng_spin = std::mt19937(toml_get<int64_t>(g, "random_seed"));
+        auto seed_dynamics = toml_get<int64_t>(g, "random_seed");
+        auto rng_spin = std::mt19937(toml_get<int64_t>(g, "model.random_seed_spins", seed_dynamics));
         std::uniform_real_distribution<double> dist(0.0, 1.0);
         std::cout << "Sites occupied by spins: " << std::endl;
         for (int i = 0; i < num_sites; i++) {
@@ -157,7 +158,9 @@ void read_state_from_dump(boost::filesystem::path const& dump_dir, fkpm::RNG &rn
     if (v.size() > 1) {
         auto num_lines = [] (const boost::filesystem::path &p) {
             boost::filesystem::ifstream file(p);
-            return std::count(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), '\n');
+            auto res = std::count(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>(), '\n');
+            file.close();
+            return res;
         };
         // in case last dump file not recorded correctly (e.g. due to walltime)
         if (num_lines(v.back()) != num_lines(*(v.rbegin()+1)) ) {
@@ -383,6 +386,9 @@ int main(int argc, char *argv[]) {
                 if (lattice == "cubic") {
                     json_file << "    \"w\": " << toml_get<int64_t>(g, "model.lx") << ",\n";
                     json_file << "    \"h\": " << toml_get<int64_t>(g, "model.ly")*toml_get<int64_t>(g, "model.lz") << ",";
+                }
+                else if (lattice == "linear") {
+                    json_file << "    \"w\": " << toml_get<int64_t>(g, "model.w") << ",";
                 }
                 else {
                     json_file << "    \"w\": " << toml_get<int64_t>(g, "model.w") << ",\n";

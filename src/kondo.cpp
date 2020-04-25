@@ -10,7 +10,9 @@
 #include <boost/filesystem/fstream.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <boost/asio.hpp>
 
+namespace ip = boost::asio::ip;
 
 // workaround missing "is_trivially_copyable" in g++ < 5.0
 #if __GNUG__ && __GNUC__ < 5
@@ -206,6 +208,7 @@ void read_state_from_dump(boost::filesystem::path const& dump_dir, fkpm::RNG &rn
 }
 
 int main(int argc, char *argv[]) {
+    std::cout << "Hostname: " << ip::host_name() << std::endl;
     auto engine = fkpm::mk_engine_mpi<cx_flt>();
     if (engine == nullptr) std::exit(EXIT_FAILURE);
     

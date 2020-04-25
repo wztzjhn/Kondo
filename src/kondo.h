@@ -49,20 +49,22 @@ protected:
     Vec<int> colors_to_groups(Vec<int> const& colors);
 
 public:
-    int n_sites; // Number of classical spins
-    int n_orbs;  // Number of rows in Hamilitonian
+    int n_sites;                             // Number of classical spins
+    int n_orbs;                              // Number of rows in Hamilitonian
     double kT_init = 0, kT_decay = 0;
+    double g_muB_elec = 0.0;                 // g-factor (mu_B included) for conduction electrons
+    double g_muB_spin = 1.0;                 // g-factor (mu_B included) for local spins
     vec3 zeeman = {0, 0, 0};        // Magnetic field zeeman coupling
     vec3 current = {0, 0, 0};       // Generates spin transfer torque
-    double easy_z = 0;              // Easy axis anisotropy (z direction)
-    double s0=0, s1=0, s2=0, s3=0;  // Exchange interactions
+    double easy_z = 0;                       // Easy axis anisotropy (z direction)
+    double s0=0, s1=0, s2=0, s3=0;           // Exchange interactions
     fkpm::SpMatElems<cx_flt> H_elems, D_elems;
     fkpm::SpMatBsr<cx_flt> H, D;
     Vec<vec3> spin;
-    Vec<bool> spin_exist;          // true if local spin exists on a given site; if empty, all sites occupied
-    std::vector<int> allow_update; // site indices for sites which have local spins
+    Vec<bool> spin_exist;                    // true if local spin exists on a given site; if empty, all sites occupied
+    std::vector<int> allow_update;           // site indices for sites which have local spins
     double time = 0;
-    Vec<vec3> dyn_stor[5]; // used by Dynamics to store intermediate data between steps
+    Vec<vec3> dyn_stor[5];                   // used by Dynamics to store intermediate data between steps
     
     Model(int n_sites, int n_orbs);
     virtual ~Model() {}

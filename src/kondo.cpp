@@ -88,6 +88,8 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
     }
     ret->kT_init  = toml_get<double>(g, "model.kT");
     ret->kT_decay = toml_get<double>(g, "model.kT_decay", 0);
+    ret->g_muB_elec = toml_get<double>(g, "model.g_muB_elec", 0);
+    ret->g_muB_spin = toml_get<double>(g, "model.g_muB_spin", 1);
     ret->zeeman   = {toml_get<double>(g, "model.zeeman_x",  0), toml_get<double>(g, "model.zeeman_y",  0), toml_get<double>(g, "model.zeeman_z",  0)};
     ret->current  = {toml_get<double>(g, "model.current_x", 0), toml_get<double>(g, "model.current_y", 0), toml_get<double>(g, "model.current_z", 0)};
     ret->easy_z   = toml_get<double>(g, "model.easy_z", 0);

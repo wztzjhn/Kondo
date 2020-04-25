@@ -47,7 +47,7 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
     for (int i = 0; i < n_sites; i++) {
         if (spin_exist.empty() || spin_exist[i]) {
             force[i]   += - 2 * s0 * spin[i];
-            force[i]   += zeeman;
+            force[i]   += g_muB_spin * zeeman;
             force[i].z += 2 * easy_z * spin[i].z;
         }
     }
@@ -114,8 +114,8 @@ double Model::energy_classical(Vec<vec3> const& spin) {
     for (int i = 0; i < n_sites; i++) {
         if (spin_exist.empty() || spin_exist[i]) {
             acc += s0 * spin[i].norm2();
-            acc += - zeeman.dot(spin[i]);
-            acc += - easy_z * spin[i].z * spin[i].z;
+            acc -= g_muB_spin * zeeman.dot(spin[i]);
+            acc -= easy_z * spin[i].z * spin[i].z;
         }
     }
     
@@ -188,7 +188,7 @@ void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
         for (int s1 = 0; s1 < 2; s1++) {
             for (int s2 = 0; s2 < 2; s2++) {
                 cx_flt v = (spin_exist.empty() || spin_exist[i]) ?
-                           -pauli[s1][s2].dot(flt(J)*spin[i] + zeeman) : 0.0;
+                           -pauli[s1][s2].dot(flt(J)*spin[i] + g_muB_elec * zeeman) : 0.0;
                 H_elems.add(2*i+s1, 2*i+s2, &v);
                 D_elems.add(2*i+s1, 2*i+s2, &zero);
             }

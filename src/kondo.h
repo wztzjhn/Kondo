@@ -103,6 +103,7 @@ public:
     static std::unique_ptr<SimpleModel> mk_triangular(int w, int h);
     static std::unique_ptr<SimpleModel> mk_kagome(int w, int h);
     static std::unique_ptr<SimpleModel> mk_cubic(int lx, int ly, int lz);
+    static std::unique_ptr<SimpleModel> mk_pyrochlore(int lx, int ly, int lz);
 };
 
 class MostovoyModel: public Model {

@@ -390,7 +390,7 @@ int main(int argc, char *argv[]) {
                 )";
                 auto lattice = toml_get<std::string>(g, "model.lattice");
                 json_file << "    \"type\": \"" << lattice << "\",\n";
-                if (lattice == "cubic") {
+                if (lattice == "cubic" || lattice == "pyrochlore") {
                     json_file << "    \"w\": " << toml_get<int64_t>(g, "model.lx") << ",\n";
                     json_file << "    \"h\": " << toml_get<int64_t>(g, "model.ly")*toml_get<int64_t>(g, "model.lz") << ",";
                 }

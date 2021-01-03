@@ -61,6 +61,8 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
             m = SimpleModel::mk_kagome(toml_get<int64_t>(g, "model.w"), toml_get<int64_t>(g, "model.h"));
         } else if (lattice == "cubic") {
             m = SimpleModel::mk_cubic(toml_get<int64_t>(g, "model.lx"), toml_get<int64_t>(g, "model.ly"), toml_get<int64_t>(g, "model.lz"));
+        } else if (lattice == "pyrochlore") {
+            m = SimpleModel::mk_pyrochlore(toml_get<int64_t>(g, "model.lx"), toml_get<int64_t>(g, "model.ly"), toml_get<int64_t>(g, "model.lz"));
         } else {
             std::cerr << "Simple model lattice '" << lattice << "' not supported.\n";
             std::exit(EXIT_FAILURE);

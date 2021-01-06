@@ -950,12 +950,6 @@ public:
                     coor2idx(i - 1, j,     k,     1, site1); idx[3] = site1;
                     coor2idx(i,     j - 1, k,     2, site1); idx[4] = site1;
                     coor2idx(i,     j,     k - 1, 3, site1); idx[5] = site1;
-                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
                     break;
                 case 1:
                     idx[0] = site0 - 1;
@@ -964,12 +958,6 @@ public:
                     coor2idx(i + 1, j,     k,     0, site1); idx[3] = site1;
                     coor2idx(i + 1, j - 1, k,     2, site1); idx[4] = site1;
                     coor2idx(i + 1, j,     k - 1, 3, site1); idx[5] = site1;
-                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
                     break;
                 case 2:
                     idx[0] = site0 - 2;
@@ -978,12 +966,6 @@ public:
                     coor2idx(i,     j + 1, k,     0, site1); idx[3] = site1;
                     coor2idx(i - 1, j + 1, k,     1, site1); idx[4] = site1;
                     coor2idx(i,     j + 1, k - 1, 3, site1); idx[5] = site1;
-                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
                     break;
                 case 3:
                     idx[0] = site0 - 3;
@@ -992,12 +974,6 @@ public:
                     coor2idx(i,     j,     k + 1, 0, site1); idx[3] = site1;
                     coor2idx(i - 1, j,     k + 1, 1, site1); idx[4] = site1;
                     coor2idx(i,     j - 1, k + 1, 2, site1); idx[5] = site1;
-                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
-                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
                     break;
                 default:
                     assert(false);

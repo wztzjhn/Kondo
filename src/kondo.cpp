@@ -63,6 +63,8 @@ std::unique_ptr<Model> mk_model(const toml_ptr g) {
             m = SimpleModel::mk_cubic(toml_get<int64_t>(g, "model.lx"), toml_get<int64_t>(g, "model.ly"), toml_get<int64_t>(g, "model.lz"));
         } else if (lattice == "pyrochlore") {
             m = SimpleModel::mk_pyrochlore(toml_get<int64_t>(g, "model.lx"), toml_get<int64_t>(g, "model.ly"), toml_get<int64_t>(g, "model.lz"));
+        } else if (lattice == "pyrochlore_cubic") {
+            m = SimpleModel::mk_pyrochlore_cubic(toml_get<int64_t>(g, "model.lx"), toml_get<int64_t>(g, "model.ly"), toml_get<int64_t>(g, "model.lz"));
         } else {
             std::cerr << "Simple model lattice '" << lattice << "' not supported.\n";
             std::exit(EXIT_FAILURE);
@@ -390,7 +392,7 @@ int main(int argc, char *argv[]) {
                 )";
                 auto lattice = toml_get<std::string>(g, "model.lattice");
                 json_file << "    \"type\": \"" << lattice << "\",\n";
-                if (lattice == "cubic" || lattice == "pyrochlore") {
+                if (lattice == "cubic" || lattice == "pyrochlore" || lattice == "pyrochlore_cubic") {
                     json_file << "    \"w\": " << toml_get<int64_t>(g, "model.lx") << ",\n";
                     json_file << "    \"h\": " << toml_get<int64_t>(g, "model.ly")*toml_get<int64_t>(g, "model.lz") << ",";
                 }

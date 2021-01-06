@@ -860,7 +860,190 @@ class PyrochloreModel: public SimpleModel {
 public:
     int lx, ly, lz;
 
-    PyrochloreModel(int lx, int ly, int lz): SimpleModel(16*lx*ly*lz), lx(lx), ly(ly), lz(lz) {
+    PyrochloreModel(int lx, int ly, int lz): SimpleModel(4*lx*ly*lz), lx(lx), ly(ly), lz(lz) {
+    }
+
+    vec3 dimensions() {
+        std::cerr << "Incorrect implementation here. To be modified" << std::endl;
+        return {1.0 * lx, 1.0 * ly, 1.0 * lz};
+    }
+
+    // idx = sub + (i + (j + k * ly) * lx) * 4
+    void idx2coor(int &i, int &j, int &k, int &sub, int idx) const {
+        assert(idx >= 0 && idx < n_sites);
+        sub  = idx % 4;
+        idx /= 4;
+        i    = idx % lx;
+        idx /= lx;
+        j    = idx % ly;
+        k    = idx / ly;
+    }
+
+    void coor2idx(int i, int j, int k, const int &sub, int &idx) const {
+        assert(sub >= 0 && sub < 4);
+        while (i < 0) i += lx;
+        if (i >= lx)  i  = i % lx;
+        while (j < 0) j += ly;
+        if (j >= ly)  j  = j % ly;
+        while (k < 0) k += lz;
+        if (k >= lz)  k  = k % lz;
+        idx = sub + (i + (j + k * ly) * lx) * 4;
+    }
+
+    vec3 position(int i) {
+        int i_1, i_2, i_3, sub;
+        idx2coor(i_1, i_2, i_3, sub, i);
+        vec3 res = {0.5 * (i_2 + i_3), 0.5 * (i_1 + i_3), 0.5 * (i_1 + i_2)};
+        switch (sub) {
+            case 0:
+                res.x += 0.25;
+                res.y += 0.25;
+                res.z += 0.25;
+                break;
+            case 1:
+                res.x += 0.25;
+                res.y += 0.50;
+                res.z += 0.50;
+                break;
+            case 2:
+                res.x += 0.50;
+                res.y += 0.25;
+                res.z += 0.50;
+                break;
+            case 3:
+                res.x += 0.50;
+                res.y += 0.50;
+                res.z += 0.25;
+                break;
+        }
+        return res;
+    }
+
+    void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
+        if (name == "ferro") {
+            spin.assign(n_sites, {0, 0, 1});
+        } else {
+            std::cerr << "Unknown configuration type `" << name << "`\n";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
+    void set_neighbors(int rank, int site0, Vec<int>& idx) {
+        if (rank >= 1) {
+            std::cerr << "Only up to 1st nearest neighbors supported on pyrochlore (fcc version) lattice\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (rank == 0) {
+            idx.resize(6);
+        }
+
+        int i, j, k, sub;
+        idx2coor(i, j, k, sub, site0);
+        int site1;
+
+        if (rank == 0) {
+            switch (sub) {
+                case 0:
+                    idx[0] = site0 + 1;
+                    idx[1] = site0 + 2;
+                    idx[2] = site0 + 3;
+                    coor2idx(i - 1, j,     k,     1, site1); idx[3] = site1;
+                    coor2idx(i,     j - 1, k,     2, site1); idx[4] = site1;
+                    coor2idx(i,     j,     k - 1, 3, site1); idx[5] = site1;
+                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
+                    break;
+                case 1:
+                    idx[0] = site0 - 1;
+                    idx[1] = site0 + 1;
+                    idx[2] = site0 + 2;
+                    coor2idx(i + 1, j,     k,     0, site1); idx[3] = site1;
+                    coor2idx(i + 1, j - 1, k,     2, site1); idx[4] = site1;
+                    coor2idx(i + 1, j,     k - 1, 3, site1); idx[5] = site1;
+                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
+                    break;
+                case 2:
+                    idx[0] = site0 - 2;
+                    idx[1] = site0 - 1;
+                    idx[2] = site0 + 1;
+                    coor2idx(i,     j + 1, k,     0, site1); idx[3] = site1;
+                    coor2idx(i - 1, j + 1, k,     1, site1); idx[4] = site1;
+                    coor2idx(i,     j + 1, k - 1, 3, site1); idx[5] = site1;
+                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
+                    break;
+                case 3:
+                    idx[0] = site0 - 3;
+                    idx[1] = site0 - 2;
+                    idx[2] = site0 - 1;
+                    coor2idx(i,     j,     k + 1, 0, site1); idx[3] = site1;
+                    coor2idx(i - 1, j,     k + 1, 1, site1); idx[4] = site1;
+                    coor2idx(i,     j - 1, k + 1, 2, site1); idx[5] = site1;
+                    assert( std::abs( (position(site0) - position(idx[0])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[1])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[2])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[3])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[4])).norm2() - 0.125) < 0.0001 );
+                    assert( std::abs( (position(site0) - position(idx[5])).norm2() - 0.125) < 0.0001 );
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+    }
+
+    Vec<int> groups(int n_colors) {
+        n_colors = std::min(n_colors, n_sites);
+        if (n_colors%4 != 0) {
+            std::cerr << "n_colors=" << n_colors << " is not a multiple of 4\n";
+            std::exit(EXIT_FAILURE);
+        }
+        int c_len = int(cbrt(n_colors/4));
+        if (c_len*c_len*c_len != n_colors/4) {
+            std::cerr << "n_colors/4=" << n_colors/4 << " is not a perfect cube\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (lx % c_len != 0 || ly % c_len != 0 || lz % c_len != 0) {
+            std::cerr << "cbrt(n_colors/4)=" << c_len << " is not a divisor of lattice size (lx,ly,lz)=("
+                      << lx << "," << ly << "," << lz << ")\n";
+            std::exit(EXIT_FAILURE);
+        }
+        Vec<int> colors(n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            int x, y, z, sub;
+            idx2coor(x, y, z, sub, i);
+            int cx = x%c_len;
+            int cy = y%c_len;
+            int cz = z%c_len;
+            colors[i] = 4*(cx+(cy+cz*c_len)*c_len) + sub;
+        }
+        return colors_to_groups(colors);
+    }
+
+};
+std::unique_ptr<SimpleModel> SimpleModel::mk_pyrochlore(int lx, int ly, int lz) {
+    return std::make_unique<PyrochloreModel>(lx, ly, lz);
+}
+
+class PyrochloreCubicModel: public SimpleModel {
+public:
+    int lx, ly, lz;
+
+    PyrochloreCubicModel(int lx, int ly, int lz): SimpleModel(16*lx*ly*lz), lx(lx), ly(ly), lz(lz) {
     }
 
     vec3 dimensions() {
@@ -948,7 +1131,7 @@ public:
 
     void set_neighbors(int rank, int site0, Vec<int>& idx) {
         if (rank >= 3) {
-            std::cerr << "Only up to 3rd nearest neighbors supported on pyrochlore lattice\n";
+            std::cerr << "Only up to 3rd nearest neighbors supported on pyrochlore (cubic version) lattice\n";
             std::exit(EXIT_FAILURE);
         }
         if (rank == 0) {
@@ -1541,6 +1724,6 @@ public:
     }
 
 };
-std::unique_ptr<SimpleModel> SimpleModel::mk_pyrochlore(int lx, int ly, int lz) {
-    return std::make_unique<PyrochloreModel>(lx, ly, lz);
+std::unique_ptr<SimpleModel> SimpleModel::mk_pyrochlore_cubic(int lx, int ly, int lz) {
+    return std::make_unique<PyrochloreCubicModel>(lx, ly, lz);
 }

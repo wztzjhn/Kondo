@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.12)
 
 project(kondo)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
@@ -32,14 +32,6 @@ endif()
 
 
 # -- DEPENDENCIES -------------------------------------------
-
-# Thread Building Blocks
-find_package(TBB)
-if (TBB_FOUND)
-    include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
-    set(LIBS ${LIBS} ${TBB_LIBRARIES})
-    add_definitions(-DWITH_TBB)
-endif()
 
 # MPI
 find_package(MPI)

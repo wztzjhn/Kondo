@@ -43,6 +43,26 @@ if (WITH_MPI)
   add_definitions(-DWITH_MPI)
 endif()
 
+# CUDA
+find_package(CUDA 9.0)
+if (CUDA_FOUND)
+  message(STATUS "Found CUDA " ${CUDA_VERSION})
+  include_directories(SYSTEM ${CUDA_INCLUDE_DIRS})
+  set(LIBS ${LIBS} ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_cusparse_LIBRARY})
+  add_definitions(-DWITH_CUDA)
+  if (APPLE)
+    # With recent versions of Xcode, must explicitly use clang
+    set(CUDA_HOST_COMPILER /usr/bin/clang)
+  endif()
+  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O2;-Xcompiler=-fPIC;
+    -gencode=arch=compute_52,code=sm_52;
+    -gencode=arch=compute_60,code=sm_60;
+    -gencode=arch=compute_61,code=sm_61;
+    -gencode=arch=compute_70,code=sm_70;
+    -gencode=arch=compute_70,code=compute_70)
+  set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+endif()
+
 # Armadillo
 find_package(Armadillo REQUIRED)
 include_directories(SYSTEM ${ARMADILLO_INCLUDE_DIRS})

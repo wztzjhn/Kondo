@@ -67,7 +67,7 @@ find_package(CPPTOML REQUIRED)
 include_directories(SYSTEM ${CPPTOML_INCLUDE_DIRS})
 
 # Boost
-find_package(Boost 1.55.0 REQUIRED COMPONENTS filesystem system)
+find_package(Boost 1.55.0 REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 set(LIBS ${LIBS} ${Boost_LIBRARIES})
 

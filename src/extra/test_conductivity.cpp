@@ -23,7 +23,7 @@ void testConductivity1() {
     int s  = 4;
     int M  = 40;
     int Mq = 2*M;
-    
+
     double hopping     = 1.0;
     double B_over_phi0 = 0.05;
     double kT          = 0.001 * hopping;
@@ -37,32 +37,32 @@ void testConductivity1() {
                                                       -sin(2.0*fkpm::Pi*B_over_phi0*yi));
             cx_double hop_xneg = -hopping * cx_double(cos(2.0*fkpm::Pi*B_over_phi0*yi),
                                                       sin(2.0*fkpm::Pi*B_over_phi0*yi));
-            cx_double hop_ypos = -hopping;
-            cx_double hop_yneg = -hopping;
-            
+            cx_double hop_ypos = {-hopping, 0.0};
+            cx_double hop_yneg = {-hopping, 0.0};
+
             cx_double crt_xpos =  hop_xpos * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_xneg = -hop_xneg * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_ypos =  hop_ypos * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_yneg = -hop_yneg * cx_double(0.0,1.0/sqrt(n));
             int pos_i = pos_square(xi, yi, lx);
             int pos_j;
-            
+
             Vec<int> xyj = {(lx+xi-1)%lx, yi};
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xpos);
             j1_elems.add(pos_i, pos_j, &crt_xpos);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xneg);
             j1_elems.add(pos_i, pos_j, &crt_xneg);
-            
+
             xyj[0] = xi;
             xyj[1] = (lx+yi-1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_ypos);
             j2_elems.add(pos_i, pos_j, &crt_ypos);
-            
+
             xyj[1] = (lx+yi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_yneg);
@@ -79,13 +79,13 @@ void testConductivity1() {
     j2_elems.clear();
     fkpm::SpMatBsr<cx_double> H(H_elems);
     H_elems.clear();
-    
+
     auto es = engine->energy_scale(H, 0.1);
     engine->set_H(H, es);
-    
+
     fkpm::RNG rng(0);
     engine->set_R_uncorrelated(n, s, rng);
-    
+
     auto mu_xy = engine->moments2_v1(M, j2_BSR, j1_BSR);
     std::cout << "mu[7,7]  = " << mu_xy[7][7] << "\n   [expect (0.00242202,-0.00292942)]" << std::endl;
     std::cout << "mu[3,5]  = " << mu_xy[3][5] << "\n   [expect (-0.0013152,-0.235975)]" << std::endl;
@@ -97,11 +97,11 @@ void testConductivity1() {
     std::cout << "cmn[13,20]=" << cmn[13][20] << "\n   [expect (928.206,15.9604)]" << std::endl;
     std::cout << "sigma_{xy}(mu = -3.5) = " << std::real(fkpm::moment_product(cmn, mu_xy))
               << "\n                [expect 1.52646]" << std::endl;
-    
+
     cmn = fkpm::electrical_conductivity_coefficients(M, Mq, kT, -2.8, 0.0, es, kernel);
     std::cout << "sigma_{xy}(mu = -2.8) = " << std::real(fkpm::moment_product(cmn, mu_xy))
               << "\n                [expect 2.44527]" << std::endl;
-    
+
     H.clear();
     j1_BSR.clear();
     j2_BSR.clear();
@@ -120,16 +120,16 @@ void testConductivity2() {
     int n_colors = 16;
     auto kernel = fkpm::jackson_kernel(M);
     auto engine = fkpm::mk_engine<cx_flt>();
-    
+
     m->set_spins("allout", toml_from_str(""), m->spin);
     m->set_hamiltonian(m->spin);
-    
+
     auto es = engine->energy_scale(m->H, 0.1);
     engine->set_H(m->H, es);
-    
+
     fkpm::RNG rng(0);
     engine->set_R_uncorrelated(m->H.n_rows, 2*n_colors, rng);
-    
+
     auto jx = m->electric_current_operator(m->spin, {1,0,0});
     auto jy = m->electric_current_operator(m->spin, {0,1,0});
     auto mu_xx = engine->moments2_v1(M, jx, jx);
@@ -138,7 +138,7 @@ void testConductivity2() {
     std::cout << "muxx[10,10]= " << mu_xx[10][10] << "\n     [expect (-1.4545,-0.00293068)]" << std::endl;
     std::cout << "muxy[12,2] = " << mu_xy[12][2] << "\n     [expect (-0.000104344,-0.089929)]" << std::endl;
     std::cout << "muxy[25,14]= " << mu_xy[25][14] << "\n     [expect (-0.00318346,-0.0581466)]" << std::endl;
-    
+
     auto cmn = electrical_conductivity_coefficients(M, Mq, m->kT(), -10.5, 0.0, es, kernel);
     std::cout << "cmn[30,30] = " << cmn[30][30] << "\n     [expect (-1.54812,0)]" << std::endl;
     std::cout << "sigma_{xx}(mu = -10.5) = " << std::real(fkpm::moment_product(cmn, mu_xx))
@@ -165,32 +165,32 @@ void test_AndersonModel() {
     int num_replica = 10;
     int M  = 100;
     int Mq = 2*M;
-    
+
     double hopping = 1.0;
     double W       = 12.0 * hopping;
     double kT      = 1.0 * hopping;
     double mu      =  0.0 * hopping;
     auto kernel    = fkpm::jackson_kernel(M);
-    
+
     Vec<double> omega;
     for (double omega_elem = 0.2; omega_elem < 15.0; omega_elem += 0.2) omega.push_back(omega_elem);
-    
+
     // need universal energy scale for all the replicas
     fkpm::EnergyScale es {-1.8*(2.0*hopping+W/2.0), 1.8*(2.0*hopping+W/2.0)};
     auto engine = fkpm::mk_engine<cx_double>();
     std::cout << es << std::endl;
-    
+
     fkpm::RNG rng(0);
     std::uniform_real_distribution<double> dist_uniform(-W/2.0, W/2.0);
-    
+
     //engine->set_R_identity(n);
     engine->set_R_uncorrelated(n, s, rng);
     //    Vec<int> groups(n);
     //    for (int i = 0; i < n; i++)
     //        groups[i] = i%s;
     //    engine->set_R_correlated(groups, rng);
-    
-    
+
+
     // Build Anderson model (Weisse paper, Eq 111)
     fkpm::SpMatElems<cx_double> elems_base(n, n, 1);
     fkpm::SpMatElems<cx_double> j1_elems(n, n, 1); // longitudinal (x direction)
@@ -200,36 +200,36 @@ void test_AndersonModel() {
             for (int zi = 0; zi < lx; zi++) {
                 int pos_i = pos_cubic(xi, yi, zi, lx);
                 int pos_j;
-                cx_double v0 = -hopping;
+                cx_double v0 = {-hopping, 0.0};
                 cx_double v1(0.0, hopping/sqrt(n));
                 cx_double v2(0.0, -hopping/sqrt(n));
-                
+
                 Vec<int> xyzj = {(lx+xi-1)%lx, yi, zi};
                 pos_j = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);      // +x
                 elems_base.add(pos_i, pos_j, &v0);
                 j1_elems.add(pos_i, pos_j, &v1);
-                
+
                 xyzj[0] = (lx+xi+1)%lx;
                 pos_j   = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);    // -x
                 elems_base.add(pos_i, pos_j, &v0);
                 j1_elems.add(pos_i, pos_j, &v2);
-                
+
                 xyzj[0] = xi;
                 xyzj[1] = (lx+yi-1)%lx;
                 pos_j   = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);    // +y
                 elems_base.add(pos_i, pos_j, &v0);
                 j2_elems.add(pos_i, pos_j, &v1);
-                
+
                 xyzj[1] = (lx+yi+1)%lx;
                 pos_j   = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);    // -y
                 elems_base.add(pos_i, pos_j, &v0);
                 j2_elems.add(pos_i, pos_j, &v2);
-                
+
                 xyzj[1] = yi;
                 xyzj[2] = (lx+zi-1)%lx;
                 pos_j   = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);    // +z
                 elems_base.add(pos_i, pos_j, &v0);
-                
+
                 xyzj[2] = (lx+zi+1)%lx;
                 pos_j   = pos_cubic(xyzj[0], xyzj[1], xyzj[2], lx);    // -z
                 elems_base.add(pos_i, pos_j, &v0);
@@ -240,14 +240,14 @@ void test_AndersonModel() {
     fkpm::SpMatBsr<cx_double> j2_BSR(j2_elems);
     j1_elems.clear();
     j2_elems.clear();
-    
+
     Vec<Vec<cx_double>> gamma_jxy(Mq);
     Vec<double> optical;
     for (int i = 0; i < Mq; i++) {
         gamma_jxy[i].resize(Mq, cx_double(0.0,0.0));
     }
     optical.resize(omega.size(),0.0);
-    
+
     cout << "calculating moments2... " << std::flush;
     fkpm::timer[0].reset();
     for (int replica = 0; replica < num_replica; replica++) {
@@ -257,7 +257,7 @@ void test_AndersonModel() {
             for (int yi = 0; yi < lx; yi++) {
                 for (int zi = 0; zi < lx; zi++) {
                     int pos_i = pos_cubic(xi, yi, zi, lx);
-                    cx_double epsiloni = dist_uniform(rng);
+                    cx_double epsiloni = {dist_uniform(rng), 0.0};
                     elems.add(pos_i, pos_i, &epsiloni);
                 }
             }
@@ -266,10 +266,10 @@ void test_AndersonModel() {
         elems.clear();
         //auto H_dense = H.to_arma_dense();
         engine->set_H(H, es);
-        
+
         Vec<Vec<cx_double>> mu_longitudinal = engine->moments2_v1(M, j1_BSR, j1_BSR);
         //Vec<Vec<cx_double>> mu_transverse   = engine->moments_tensor(M, j1_BSR, j2_BSR);
-        
+
         auto temp = fkpm::moment_transform(mu_longitudinal, Mq, kernel);
         for (int i = 0; i < Mq; i++) {
             for (int j = 0; j < Mq; j++) {
@@ -280,14 +280,14 @@ void test_AndersonModel() {
             auto cmn    = fkpm::electrical_conductivity_coefficients(M, Mq, kT, mu, omega[i], es, kernel);
             optical[i] += std::real(fkpm::moment_product(cmn, mu_longitudinal));
         }
-        
+
     }
     for (int i = 0; i < Mq; i++) {             // average over number of replicas
         for (int j = 0; j < Mq; j++) gamma_jxy[i][j] /= num_replica;
     }
     for (int i = 0; i < omega.size(); i++) optical[i] /= num_replica;
     cout << " done. " << fkpm::timer[0].measure() << "s.\n";
-    
+
     Vec<double> x, y;
     Vec<Vec<cx_double>> jxy;
     fkpm::density_function(gamma_jxy, es, x, y, jxy);
@@ -300,7 +300,7 @@ void test_AndersonModel() {
         }
     }
     fout1.close();
-    
+
     std::ofstream fout2("sigma.dat", std::ios::out | std::ios::app);
     fout2 << std::scientific << std::right;
     fout2 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -310,22 +310,22 @@ void test_AndersonModel() {
         << std::setw(20) << optical[i] << std::endl;
     }
     fout2.close();
-    
+
     j1_BSR.clear();
     j2_BSR.clear();
     std::cout << "done!" << std::endl;
-    
+
 }
 
 void test_Hall_SquareLattice() {
     auto engine = fkpm::mk_engine<cx_double>();
-    
+
     int lx = 100;
     int n  = lx * lx;
     int s  = 10;
     int M  = 200;
     int Mq = 2*M;
-    
+
     double hopping     = 1.0;
     double B_over_phi0 = 0.05;
     double kT          = 0.001 * hopping;
@@ -339,32 +339,32 @@ void test_Hall_SquareLattice() {
                                                       -sin(2.0*fkpm::Pi*B_over_phi0*yi));
             cx_double hop_xneg = -hopping * cx_double(cos(2.0*fkpm::Pi*B_over_phi0*yi),
                                                       sin(2.0*fkpm::Pi*B_over_phi0*yi));
-            cx_double hop_ypos = -hopping;
-            cx_double hop_yneg = -hopping;
-            
+            cx_double hop_ypos = {-hopping, 0.0};
+            cx_double hop_yneg = {-hopping, 0.0};
+
             cx_double crt_xpos = -hop_xpos * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_xneg =  hop_xneg * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_ypos = -hop_ypos * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_yneg =  hop_yneg * cx_double(0.0,1.0/sqrt(n));
             int pos_i = pos_square(xi, yi, lx);
             int pos_j;
-            
+
             Vec<int> xyj = {(lx+xi-1)%lx, yi};
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xpos);
             j1_elems.add(pos_i, pos_j, &crt_xpos);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xneg);
             j1_elems.add(pos_i, pos_j, &crt_xneg);
-            
+
             xyj[0] = xi;
             xyj[1] = (lx+yi-1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_ypos);
             j2_elems.add(pos_i, pos_j, &crt_ypos);
-            
+
             xyj[1] = (lx+yi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_yneg);
@@ -381,19 +381,19 @@ void test_Hall_SquareLattice() {
     j2_elems.clear();
     fkpm::SpMatBsr<cx_double> H(H_elems);
     H_elems.clear();
-    
+
     auto es = engine->energy_scale(H, 0.1);
     engine->set_H(H, es);
-    
+
     fkpm::RNG rng(0);
     engine->set_R_uncorrelated(n, s, rng);
-    
+
     std::cout << "calculating dos..." << std::endl;
     auto mu_dos = engine->moments(M);
     auto gamma_dos = fkpm::moment_transform(mu_dos, Mq);
     Vec<double> x, rho;
     fkpm::density_function(gamma_dos, es, x, rho);
-    
+
     std::ofstream fout1("dos_hall.dat", std::ios::out | std::ios::app);
     fout1 << std::scientific << std::right;
     fout1 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -403,22 +403,22 @@ void test_Hall_SquareLattice() {
         << std::setw(20) << rho[i] << std::endl;
     }
     fout1.close();
-    
+
     std::cout << "calculating transverse conductivity..." << std::endl;
     auto mu_xy = engine->moments2_v1(M, j2_BSR, j1_BSR, 20);
     std::cout << "moments obtained." << std::endl;
-    
+
     Vec<double> mu_list;
     double mu_step = (es.hi-es.lo) / Mq / 2.0;
     for (double mu_elem = es.lo; mu_elem < es.hi; mu_elem += mu_step) mu_list.push_back(mu_elem);
     arma::Col<double> sigma_xy;
     sigma_xy.zeros(mu_list.size());
-    
+
     for (int i = 0; i < mu_list.size(); i++) {
         auto cmn = fkpm::electrical_conductivity_coefficients(M, Mq, kT, mu_list[i], 0.0, es, kernel);
         sigma_xy(i) = std::real(fkpm::moment_product(cmn, mu_xy));
     }
-    
+
     std::ofstream fout2("sigma_hall.dat", std::ios::out | std::ios::app);
     fout2 << std::scientific << std::right;
     fout2 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -428,24 +428,24 @@ void test_Hall_SquareLattice() {
         << std::setw(20) << sigma_xy(i) << std::endl;
     }
     fout2.close();
-    
+
     j1_BSR.clear();
     j2_BSR.clear();
     std::cout << "done!" << std::endl;
-    
+
 }
 
 // square lattice, each triangle threaded by quarter flux.
 // for spinless electron, at half filling, sigma_{xy}=1
 void test_PRL101_156402_v0() {
     auto engine = fkpm::mk_engine<cx_double>();
-    
+
     int lx = 100;
     int n  = lx * lx;
     int s  = 10;
     int M  = 200;
     int Mq = 2*M;
-    
+
     double hopping1 = 1.0;
     double hopping2 = 0.8;
     double flux     = 0.25;
@@ -456,13 +456,13 @@ void test_PRL101_156402_v0() {
     fkpm::SpMatElems<cx_double> j2_elems(n, n, 1); // transverse   (y direction)
     for (int xi = 0; xi < lx; xi++) {
         for (int yi = 0; yi < lx; yi++) {
-            cx_double hop_xpos = -hopping1;
-            cx_double hop_xneg = -hopping1;
+            cx_double hop_xpos = {-hopping1, 0.0};
+            cx_double hop_xneg = {-hopping1, 0.0};
             cx_double hop_ypos = -hopping1 * cx_double(cos(4.0*fkpm::Pi*flux*xi), sin(4.0*fkpm::Pi*flux*xi));
             cx_double hop_yneg = -hopping1 * cx_double(cos(4.0*fkpm::Pi*flux*xi),-sin(4.0*fkpm::Pi*flux*xi));
             cx_double hop_xpyp = -hopping2 * cx_double(cos(2.0*fkpm::Pi*flux*(2.0*xi+1.0)), sin(2.0*fkpm::Pi*flux*(2.0*xi+1.0)));
             cx_double hop_xpyn = -hopping2 * cx_double(cos(2.0*fkpm::Pi*flux*(2.0*xi-1.0)),-sin(2.0*fkpm::Pi*flux*(2.0*xi-1.0)));
-            
+
             cx_double crt_xpos = -hop_xpos * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_xneg =  hop_xneg * cx_double(0.0,1.0/sqrt(n));
             cx_double crt_ypos = -hop_ypos * cx_double(0.0,1.0/sqrt(n));
@@ -471,35 +471,35 @@ void test_PRL101_156402_v0() {
             cx_double crt_xpyn =  hop_xpyn * cx_double(0.0,1.0/sqrt(n));
             int pos_i = pos_square(xi, yi, lx);
             int pos_j;
-            
+
             Vec<int> xyj = {(lx+xi-1)%lx, yi};
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xpos);
             j1_elems.add(pos_i, pos_j, &crt_xpos);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xneg);
             j1_elems.add(pos_i, pos_j, &crt_xneg);
-            
+
             xyj[0] = xi;
             xyj[1] = (lx+yi-1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_ypos);
             j2_elems.add(pos_i, pos_j, &crt_ypos);
-            
+
             xyj[1] = (lx+yi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_yneg);
             j2_elems.add(pos_i, pos_j, &crt_yneg);
-            
+
             xyj[0] = (lx+xi-1)%lx;
             xyj[1] = (lx+yi-1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
             H_elems.add(pos_i, pos_j, &hop_xpyp);
             j1_elems.add(pos_i, pos_j, &crt_xpyp);
             j2_elems.add(pos_i, pos_j, &crt_xpyp);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             xyj[1] = (lx+yi+1)%lx;
             pos_j = pos_square(xyj[0], xyj[1], lx);
@@ -518,20 +518,20 @@ void test_PRL101_156402_v0() {
     j2_elems.clear();
     fkpm::SpMatBsr<cx_double> H(H_elems);
     H_elems.clear();
-    
+
     auto es = engine->energy_scale(H, 0.1);
     //fkpm::EnergyScale es {-5.0, 5.0};
     engine->set_H(H, es);
-    
+
     fkpm::RNG rng(0);
     engine->set_R_uncorrelated(n, s, rng);
-    
+
     std::cout << "calculating dos..." << std::endl;
     auto mu_dos = engine->moments(M);
     auto gamma_dos = fkpm::moment_transform(mu_dos, Mq);
     Vec<double> x, rho;
     fkpm::density_function(gamma_dos, es, x, rho);
-    
+
     std::ofstream fout1("dos_Martin_v0.dat", std::ios::out | std::ios::app);
     fout1 << std::scientific << std::right;
     fout1 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -541,22 +541,22 @@ void test_PRL101_156402_v0() {
         << std::setw(20) << rho[i] << std::endl;
     }
     fout1.close();
-    
+
     std::cout << "calculating transverse conductivity..." << std::endl;
     auto mu_xy = engine->moments2_v1(M, j2_BSR, j1_BSR, 20);
     std::cout << "moments obtained." << std::endl;
-    
+
     Vec<double> mu_list;
     double mu_step = (es.hi-es.lo) / Mq / 2.0;
     for (double mu_elem = es.lo; mu_elem < es.hi; mu_elem += mu_step) mu_list.push_back(mu_elem);
     arma::Col<double> sigma_xy;
     sigma_xy.zeros(mu_list.size());
-    
+
     for (int i = 0; i < mu_list.size(); i++) {
         auto cmn = fkpm::electrical_conductivity_coefficients(M, Mq, kT, mu_list[i], 0.0, es, kernel);
         sigma_xy(i) = std::real(fkpm::moment_product(cmn, mu_xy));
     }
-    
+
     std::ofstream fout2("sigma_Martin_v0.dat", std::ios::out | std::ios::app);
     fout2 << std::scientific << std::right;
     fout2 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -566,11 +566,11 @@ void test_PRL101_156402_v0() {
         << std::setw(20) << sigma_xy(i) << std::endl;
     }
     fout2.close();
-    
+
     j1_BSR.clear();
     j2_BSR.clear();
     std::cout << "done!" << std::endl;
-    
+
 }
 
 
@@ -582,25 +582,25 @@ void test_PRL101_156402_v0() {
 // S_4 = (-1,-1, 1)
 void test_PRL101_156402_v1() {
     auto engine = fkpm::mk_engine<cx_double>();
-    
+
     int lx = 100;
     int n  = lx * lx;
     int s  = 40;
     int M  = 200;
     int Mq = 2*M;
-    
+
     double hopping = 1.0;
     double Jkondo  = 5.0;
     double kT      = 0.001 * hopping;
     double volume  = std::sqrt(3.0)/2.0;
     auto kernel    = fkpm::jackson_kernel(M);
-    
+
     // Build current operators and the hopping part of H on triangular lattice
     fkpm::SpMatElems<cx_double> H_elems(2*n, 2*n, 1);
     fkpm::SpMatElems<cx_double> j1_elems(2*n, 2*n, 1); // longitudinal (x direction)
     fkpm::SpMatElems<cx_double> j2_elems(2*n, 2*n, 1); // transverse   (y direction)
     for (int xi = 0; xi < lx; xi++) {
-        cx_double v0 = -hopping;
+        cx_double v0 = {-hopping, 0.0};
         cx_double v1(0.0,  hopping/sqrt(n)/sqrt(volume));
         cx_double v2(0.0, -hopping/sqrt(n)/sqrt(volume));
         cx_double v3(0.0,  0.5*hopping/sqrt(n)/sqrt(volume));
@@ -610,21 +610,21 @@ void test_PRL101_156402_v1() {
         for (int yi = 0; yi < lx; yi++) {
             int pos_i = pos_square(xi, yi, lx);
             int pos_j;
-            
+
             Vec<int> xyj = {(lx+xi-1)%lx, yi};
             pos_j = pos_square(xyj[0], xyj[1], lx);      // +x
             H_elems.add(pos_i, pos_j, &v0);              // spin up
             j1_elems.add(pos_i, pos_j, &v1);
             H_elems.add(pos_i + n, pos_j + n, &v0);      // spin down
             j1_elems.add(pos_i + n, pos_j + n, &v1);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             pos_j  = pos_square(xyj[0], xyj[1], lx);    // -x
             H_elems.add(pos_i, pos_j, &v0);             // spin up
             j1_elems.add(pos_i, pos_j, &v2);
             H_elems.add(pos_i + n, pos_j + n, &v0);     // spin down
             j1_elems.add(pos_i + n, pos_j + n, &v2);
-            
+
             xyj[0] = xi;
             xyj[1] = (lx+yi-1)%lx;
             pos_j  = pos_square(xyj[0], xyj[1], lx);     // angle pi/3
@@ -634,7 +634,7 @@ void test_PRL101_156402_v1() {
             H_elems.add(pos_i + n, pos_j + n, &v0);      // spin down
             j1_elems.add(pos_i + n, pos_j + n, &v3);
             j2_elems.add(pos_i + n, pos_j + n, &v5);
-            
+
             xyj[1] = (lx+yi+1)%lx;
             pos_j  = pos_square(xyj[0], xyj[1], lx);     // angle 4pi/3
             H_elems.add(pos_i, pos_j, &v0);              // spin up
@@ -643,7 +643,7 @@ void test_PRL101_156402_v1() {
             H_elems.add(pos_i + n, pos_j + n, &v0);      // spin down
             j1_elems.add(pos_i + n, pos_j + n, &v4);
             j2_elems.add(pos_i + n, pos_j + n, &v6);
-            
+
             xyj[0] = (lx+xi-1)%lx;
             xyj[1] = (lx+yi+1)%lx;
             pos_j  = pos_square(xyj[0], xyj[1], lx);     // angle 2pi/3
@@ -653,7 +653,7 @@ void test_PRL101_156402_v1() {
             H_elems.add(pos_i + n, pos_j + n, &v0);      // spin down
             j1_elems.add(pos_i + n, pos_j + n, &v3);
             j2_elems.add(pos_i + n, pos_j + n, &v6);
-            
+
             xyj[0] = (lx+xi+1)%lx;
             xyj[1] = (lx+yi-1)%lx;
             pos_j  = pos_square(xyj[0], xyj[1], lx);     // angle 5pi/3
@@ -669,7 +669,7 @@ void test_PRL101_156402_v1() {
     fkpm::SpMatBsr<cx_double> j2_BSR(j2_elems);
     j1_elems.clear();
     j2_elems.clear();
-    
+
     //complete the hamiltonian with the Kondo terms
     for (int xi = 0; xi < lx; xi++) {
         for (int yi = 0; yi < lx; yi++) {
@@ -705,21 +705,21 @@ void test_PRL101_156402_v1() {
     }
     fkpm::SpMatBsr<cx_double> H(H_elems);
     H_elems.clear();
-    
+
     auto es = engine->energy_scale(H, 0.1);
     engine->set_H(H, es);
-    
+
     fkpm::RNG rng(0);
     //engine->set_R_identity(2*n);
     engine->set_R_uncorrelated(2*n, s, rng);
     engine->R2 = engine->R;
-    
+
     std::cout << "calculating dos..." << std::endl;
     auto mu_dos = engine->moments(M);
     auto gamma_dos = fkpm::moment_transform(mu_dos, Mq);
     Vec<double> x, rho;
     fkpm::density_function(gamma_dos, es, x, rho);
-    
+
     std::ofstream fout1("dos_Martin_v1.dat", std::ios::out | std::ios::app);
     fout1 << std::scientific << std::right;
     fout1 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -729,11 +729,11 @@ void test_PRL101_156402_v1() {
         << std::setw(20) << rho[i] << std::endl;
     }
     fout1.close();
-    
+
     std::cout << "calculating transverse conductivity..." << std::endl;
     //auto mu_xx = engine->moments2_v1(M, j1_BSR, j1_BSR);
     auto mu_xy = engine->moments2_v1(M, j1_BSR, j2_BSR);
-    
+
     //    auto gamma_jxx = fkpm::moment_transform(mu_xx, Mq, kernel);
     //    Vec<Vec<cx_double>> jxx;
     //    Vec<double> x, y;
@@ -747,7 +747,7 @@ void test_PRL101_156402_v1() {
     //        }
     //    }
     //    fout1.close();
-    
+
     Vec<double> mu_list;
     double mu_step = (es.hi-es.lo) / Mq / 2.0;
     for (double mu_elem = es.lo; mu_elem < es.hi; mu_elem += mu_step) mu_list.push_back(mu_elem);
@@ -764,8 +764,8 @@ void test_PRL101_156402_v1() {
         sigma_xy(i) = std::real(fkpm::moment_product(cmn, mu_xy));
         //std::cout <<  "mu = " << mu_list[i] << ", sigma_xx = " << sigma_xx(i) << std::endl;
     }
-    
-    
+
+
     std::ofstream fout2("sigma_Martin_v1.dat", std::ios::out | std::ios::app);
     fout2 << std::scientific << std::right;
     fout2 << std::setw(20) << "#M" << std::setw(20) << "beta" << std::setw(20)
@@ -775,7 +775,7 @@ void test_PRL101_156402_v1() {
         << std::setw(20) << sigma_xx(i) << std::setw(20) << sigma_xy(i) << std::endl;
     }
     fout2.close();
-    
+
     j1_BSR.clear();
     j2_BSR.clear();
     std::cout << "done!" << std::endl;
@@ -787,14 +787,14 @@ void test_PRL101_156402_v1() {
 void testKondo1_cubic() {//cubic
     auto engine = fkpm::mk_engine<cx_flt>();
     if (engine == nullptr) std::exit(EXIT_FAILURE);
-    
-    
+
+
     int w = 6, h = 6, h_z = 6;
     int int_mu, total_mu=100;
     double mu =0.0, del_mu=12.4/total_mu, mu_start=-6.2;
-    
+
     std::stringstream fname;
-    
+
     auto m = SimpleModel::mk_cubic(w, h, h_z);
     m->J = 0.2;
     m->t1 = -1;
@@ -803,24 +803,24 @@ void testKondo1_cubic() {//cubic
     m->set_spins("ferro", toml_from_str(""), m->spin);
     //m->lattice->set_spins("meron", nullptr, m->spin);
     m->spin[0] = vec3(1, 1, 1).normalized();
-    
+
     fname << "mu_n_cubic_test_L_" << w << "_t1_" <<  m->t1 << "_t2_" <<  m->t2 << "_t3_" <<  m->t3 << "_J_" <<  m->J << "_01.txt";
-    
+
     m->set_hamiltonian(m->spin);
     int n = m->H.n_rows;
-    
+
     std::ofstream dump_file(fname.str(), std::ios::trunc);
-    
-    
+
+
     for (int_mu=0; int_mu<total_mu; int_mu++) {
         mu = del_mu*int_mu + mu_start;
-        
+
         Vec<double> gamma;
         Vec<double> moments;
-        
+
         arma::vec eigs = arma::conv_to<arma::vec>::from(arma::eig_gen(m->H.to_arma_dense()));
         //double E1 = electronic_grand_energy(eigs, m->kT(), mu) / m->n_sites;
-        
+
         auto es = engine->energy_scale(m->H, 0.1);
         int M = 2000;
         int Mq = 4*M;
@@ -829,28 +829,28 @@ void testKondo1_cubic() {//cubic
         auto f_c = expansion_coefficients(M, Mq, std::bind(fkpm::fermi_density, _1, m->kT(), mu), es);
         engine->set_H(m->H, es);
         engine->set_R_identity(n);
-        
-        
-        
+
+
+
         //double E2 = moment_product(g_c, engine->moments(M)) / m->n_sites;
-        
+
         //cout << "H: " << *m->H(0, 0) << " " << *m->H(1, 0) << "\n  [(-0.288675,0)  (-0.288675,-0.288675)]\n";
         //cout << "   " << *m->H(0, 1) << " " << *m->H(1, 1) << "\n  [(-0.288675,0.288675) (0.288675,0)]\n\n";
-        
+
         engine->autodiff_matrix(g_c, m->D);
         //cout << "D: " << *m->D(0, 0) << " " << *m->D(1, 0) << "\n  [(0.481926,0) (0.0507966,0.0507966)]\n";
         //cout << "   " << *m->D(0, 1) << " " << *m->D(1, 1) << "\n  [(0.0507966,-0.0507966) (0.450972,0)]\n\n";
-        
+
         Vec<vec3>& force = m->dyn_stor[0];
         m->set_forces(m->D, m->spin, force);
-        
+
         //cout << std::setprecision(9);
         //cout << "grand energy " <<  E1 << " " << E2 << "\n            [-1.98657216 -1.98657194]\n";
         //cout << "force " << force[0] << "\n     [<x=0.0507965542, y=0.0507965542, z=-0.384523162>]\n\n";
-        
+
         moments = engine->moments(M);
         gamma = fkpm::moment_transform(moments, Mq);
-        
+
         //fprintf(fp1, "%10f, %10lf\n", mu, g.get_unwrap<double>("ensemble.filling"));
         //printf("%10lf, %10f\n", mu, g.get_unwrap<double>("ensemble.filling"));
         double filling =  mu_to_filling(gamma, es, m->kT(), mu);
@@ -904,7 +904,7 @@ arma::cx_mat transformU(int lx) {
 // triangular lattice
 void testKondo6() {
     auto engine = fkpm::mk_engine<cx_flt>();
-    
+
     int w = 100, h = 100;
     auto m = SimpleModel::mk_triangular(w, h);
     m->J = 5.0 * sqrt(3.0);
@@ -913,31 +913,31 @@ void testKondo6() {
     int Mq = M;
     int n_colors = 12;
     auto kernel = fkpm::jackson_kernel(M);
-    
-    
+
+
     m->set_spins("allout", toml_from_str(""), m->spin);
     m->set_hamiltonian(m->spin);
-    
+
     auto es = engine->energy_scale(m->H, 0.1);
     engine->set_H(m->H, es);
-    
+
     fkpm::RNG rng(0);
     //engine->set_R_correlated(m->groups(n_colors), rng);
     engine->set_R_uncorrelated(m->H.n_rows, 2*n_colors, rng);
     engine->R2 = engine->R;
-    
+
     //    auto u_fourier = transformU(4);
-    
+
     auto jx = m->electric_current_operator(m->spin, {1,0,0});
     auto jy = m->electric_current_operator(m->spin, {0,1,0});
-    
+
     cout << "calculating moments2... " << std::flush;
     fkpm::timer[0].reset();
     auto mu_xy = engine->moments2_v1(M, jx, jy);
     cout << " done. " << fkpm::timer[0].measure() << "s.\n";
-    
+
     cout << "T=" << m->kT();
-    
+
     cout << "calculating xy conductivities... " << std::flush;
     std::ofstream fout2("test.dat", std::ios::out /* | std::ios::app */);
     fout2 << std::scientific << std::right;
@@ -952,7 +952,7 @@ void testKondo6() {
     }
     fout2.close();
     cout << " done. " << fkpm::timer[0].measure() << "s.\n";
-    
+
     //    auto cmn = electrical_conductivity_coefficients(M, Mq, m->kT(), -10.0, 0.0, es, kernel);
     //    std::ofstream fout6("cmn_mu_m10_RE.dat", std::ios::out /* | std::ios::app */);
     //    std::ofstream fout7("cmn_mu_m10_IM.dat", std::ios::out /* | std::ios::app */);
@@ -1011,7 +1011,7 @@ void testKondo6() {
     //
     //    auto f = std::bind(fkpm::fermi_density, _1, m->kT(), -9.0);
     //    auto f_c = expansion_coefficients(M, Mq, f, es);
-    
+
     //    std::ofstream fout13("c_mu_m9_RE.dat", std::ios::out /* | std::ios::app */);
     //    for (int m = 0; m < M; m++) {
     //        fout13 << std::setw(20)<< m << std::setw(20) << f_c[m] << std::endl;
@@ -1033,12 +1033,12 @@ void testKondo6() {
     //        fout15 << std::setw(20)<< m << std::setw(20) << f_c[m] << std::endl;
     //    }
     //    fout15.close();
-    
+
 }
 
 void testKondo7() {
     auto engine = fkpm::mk_engine<cx_flt>();
-    
+
     int w = 32, h = 32;
     auto m = SimpleModel::mk_kagome(w, h);
     m->J = 15.0 * sqrt(3.0);
@@ -1048,7 +1048,7 @@ void testKondo7() {
     int Lc = 4;
     int n_colors = 3 * Lc * Lc;
     auto kernel = fkpm::jackson_kernel(M);
-    
+
     //m->set_spins("allout", mk_toml(""), m->spin);
     double dz = 0.55;
     for(int i=0; i<m->n_sites; i++) {
@@ -1057,25 +1057,25 @@ void testKondo7() {
         if(v == 0) s = vec3(-0.5 * sqrt(3.), -0.5, dz);
         else if(v == 1) s = vec3(0, 1, dz);
         else s = vec3(+0.5 * sqrt(3.), -0.5, dz);
-        
+
         m->spin[i] = s.normalized();
     }
-    
+
     m->set_hamiltonian(m->spin);
-    
+
     auto es = engine->energy_scale(m->H, 0.1);
-    
+
     engine->set_H(m->H, es);
-    
+
     fkpm::RNG rng(0);
     //engine->set_R_correlated(m->groups(n_colors), rng);
     engine->set_R_uncorrelated(m->H.n_rows, 2*n_colors, rng);
     engine->R2 = engine->R;
-    
+
     auto moments = engine->moments(M);
     std::cout << "time to calculate moments : " << fkpm::timer[0].measure() << "\n";
     auto gamma = fkpm::moment_transform(moments, Mq);
-    
+
     std::ofstream fs("dos.dat");
     Vec<double> x, rho, irho;
     fkpm::density_function(gamma, es, x, rho);
@@ -1084,21 +1084,21 @@ void testKondo7() {
         fs << x[i] << " " << rho[i] / m->H.n_rows << " " << irho[i] / m->H.n_rows << "\n";
     }
     fs.close();
-    
+
     //    auto u_fourier = transformU(4);
-    
+
     //double area = 4. * w*h*sqrt(3.0)/2.0;
     auto jx = m->electric_current_operator(m->spin, {1,0,0});
     auto jy = m->electric_current_operator(m->spin, {0,1,0});
     //jx.scale(1/sqrt(area));
     //jy.scale(1/sqrt(area));
-    
+
     cout << "calculating moments2... " << std::flush;
     fkpm::timer[0].reset();
     auto mu_xy = engine->moments2_v1(M, jx, jy, 3);
     auto mu_xx = engine->moments2_v1(M, jx, jx, 3);
     cout << " done. " << fkpm::timer[0].measure() << "s.\n";
-    
+
     cout << "calculating xy conductivities... " << std::flush;
     std::ofstream fout2("test.dat", std::ios::out /* | std::ios::app */);
     fout2 << std::scientific << std::right;

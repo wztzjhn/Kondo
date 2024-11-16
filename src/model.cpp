@@ -183,7 +183,7 @@ void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
     D_elems.clear();
 
     // Hund coupling
-    cx_flt zero = 0;
+    cx_flt zero = {0.0, 0.0};
     for (int i = 0; i < n_sites; i++) {
         for (int s1 = 0; s1 < 2; s1++) {
             for (int s2 = 0; s2 < 2; s2++) {
@@ -200,7 +200,7 @@ void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
     Vec<double> ts = {t1, t2, t3};
     for (int rank = 0; rank < ts.size(); rank++) {
         if (ts[rank] != 0.0) {
-            cx_flt t = ts[rank];
+            cx_flt t = {static_cast<float>(ts[rank]), 0.0};
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
@@ -228,12 +228,12 @@ void SimpleModel::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& s
     // Hund-coupling forces
     for (int i = 0; i < n_sites; i++) {
         if (!spin_exist.empty() && !spin_exist[i]) continue;
-        Vec3<cx_flt> dE_dS(0, 0, 0);
+        Vec3<cx_flt> dE_dS({0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0});
         for (int s1 = 0; s1 < 2; s1 ++) {
             for (int s2 = 0; s2 < 2; s2 ++) {
                 // Apply chain rule: dE/dS = dH_ij/dS D_ji
                 // where D_ij = dE/dH_ji is the density matrix
-                Vec3<cx_flt> dH_ij_dS = -J * pauli[s1][s2];
+                Vec3<cx_flt> dH_ij_dS = -cx_flt(J, 0.0) * pauli[s1][s2];
                 cx_flt D_ji = *D(2*i+s2, 2*i+s1);
                 dE_dS += dH_ij_dS * D_ji;
             }
@@ -249,7 +249,7 @@ fkpm::SpMatBsr<cx_flt> SimpleModel::electric_current_operator(Vec<vec3> const& s
     double sqrt_vol = sqrt(d.x*d.y*d.z);
 
     fkpm::SpMatElems<cx_flt> j_elems(n_sites*n_orbs, n_sites*n_orbs, 1);
-    cx_flt zero = 0;
+    cx_flt zero = {0.0, 0.0};
     for (int i = 0; i < n_sites*n_orbs; i++) {
         j_elems.add(i, i, &zero);
     }

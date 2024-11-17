@@ -38,8 +38,8 @@ set(LIBS ${LIBS} ${ARMADILLO_LIBRARIES})
 
 # FastKPM
 find_package(fastkpm REQUIRED)
-include_directories(SYSTEM ${FASTKPM_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${FASTKPM_LIBRARIES})
+message(STATUS "FASTKPM include dirs: ${FASTKPM_INCLUDE_DIRS}")
+message(STATUS "FASTKPM prefix dir: ${PACKAGE_PREFIX_DIR}")
 
 #cpptoml
 find_package(CPPTOML REQUIRED)

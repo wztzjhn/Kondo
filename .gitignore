@@ -1,4 +1,6 @@
 build
 xbuild
+cmake-build-debug
 tests
 .DS_Store
+.idea

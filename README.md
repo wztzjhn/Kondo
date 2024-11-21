@@ -4,7 +4,7 @@ Kondo
 What it does
 ------------
 
-This code builds upon the [FastKPM](https://github.com/kbarros/FastKPM) library to enable fast, linear-scaling simulations of the classical Kondo lattice model (KLM).
+This code builds upon the [FastKPM](https://github.com/wztzjhn/FastKPM) library to enable fast, linear-scaling simulations of the classical Kondo lattice model (KLM).
 
 The model contains itinerant electrons, whose spins couple to _classical_ magnetic moments localized on each site. After "integrating out" the itinerant electrons, the effective interactions between magnetic moments can be long-range and many-body. For example, at weak coupling `J`, the effective interactions are of the [RKKY type](https://en.wikipedia.org/wiki/RKKY_interaction). This code allows arbitrary `J`, and treats long-range interactions correctly.
 
@@ -15,7 +15,7 @@ Building
 
 Building is handled with CMake.
 
-The [FastKPM](https://github.com/kbarros/FastKPM) library should already be compiled and installed. Kondo will then automatically link to it.
+The [FastKPM](https://github.com/wztzjhn/FastKPM) library should already be compiled and installed. Kondo will then automatically link to it.
 
 This package includes tests. Please start with `bin/test_kpm` and `bin/test_kondo` to make sure everything is installed correctly.
 

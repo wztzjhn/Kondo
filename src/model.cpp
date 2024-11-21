@@ -42,14 +42,16 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
     for (auto& f : force) {
         f = {0,0,0};
     }
-    
+
     // Site-local forces
     for (int i = 0; i < n_sites; i++) {
-        force[i]   += - 2 * s0 * spin[i];
-        force[i]   += zeeman;
-        force[i].z += 2 * easy_z * spin[i].z;
+        if (spin_exist.empty() || spin_exist[i]) {
+            force[i]   += - 2 * s0 * spin[i];
+            force[i]   += g_muB_spin * zeeman;
+            force[i].z += 2 * easy_z * spin[i].z;
+        }
     }
-    
+
     // Super-exchange forces
     Vec<int> js;
     Vec<double> ss = {s1, s2, s3};
@@ -58,14 +60,20 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
-                    force[i] += - ss[rank] * spin[j];
+                    if (spin_exist.empty() || (spin_exist[i] && spin_exist[j])) {
+                        force[i] += - ss[rank] * spin[j];
+                    }
                 }
             }
         }
     }
-    
+
     // Spin transfer torque
     if (current.norm2() > 0) {
+        if (! spin_exist.empty()) {
+            std::cout << "dilute spin not implemented yet!" << std::endl;
+            assert(false);
+        }
         for (int i = 0; i < n_sites; i++) {
             // -- Build matrix of nearest neighbor displacements
             int nn_rank = 0;
@@ -75,7 +83,7 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
                 vec3 dr = displacement(js[idx], i);
                 X.row(idx) = arma::rowvec{dr.x, dr.y, dr.z};
             }
-            
+
             // -- Calculate directional derivative stencil
             arma::mat gram = X.t()*X;
             // The Gram matrix is positive semi-definite. If any diagonal component is zero, this indicates
@@ -86,7 +94,7 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
                 if (gram(dir, dir) == 0.0) gram(dir, dir) = 1.0;
             }
             arma::mat stencil = arma::rowvec{current.x, current.y, current.z} * arma::solve(gram, X.t());
-            
+
             // -- Add spin transfer torque to each force
             for (int idx = 0; idx < js.size(); idx++) {
                 vec3 dS = spin[js[idx]] - spin[i];
@@ -101,14 +109,16 @@ void Model::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, V
 
 double Model::energy_classical(Vec<vec3> const& spin) {
     double acc = 0;
-    
+
     // Site-local energy
     for (int i = 0; i < n_sites; i++) {
-        acc += s0 * spin[i].norm2();
-        acc += - zeeman.dot(spin[i]);
-        acc += - easy_z * spin[i].z * spin[i].z;
+        if (spin_exist.empty() || spin_exist[i]) {
+            acc += s0 * spin[i].norm2();
+            acc -= g_muB_spin * zeeman.dot(spin[i]);
+            acc -= easy_z * spin[i].z * spin[i].z;
+        }
     }
-    
+
     // Super-exchange energy
     Vec<int> js;
     Vec<double> ss = {s1, s2, s3};
@@ -117,12 +127,14 @@ double Model::energy_classical(Vec<vec3> const& spin) {
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
-                    acc += ss[rank] * spin[i].dot(spin[j]) / 2; // adjust for double counting
+                    if (spin_exist.empty() || (spin_exist[i] && spin_exist[j])) {
+                        acc += ss[rank] * spin[i].dot(spin[j]) * 0.5; // adjust for double counting
+                    }
                 }
             }
         }
     }
-    
+
     return acc;
 }
 
@@ -138,20 +150,20 @@ vec3 Model::displacement(int i, int j) {
     vec3 vx = vec3{1,     0, 0} * dim.x;
     vec3 vy = vec3{sxy,   1, 0} * dim.y;
     vec3 vz = vec3{sxz, syz, 1} * dim.z;
-    
+
     // row vectors of inverse of [vx, vy, vz] matrix
     vec3 ux = vec3{1, -sxy, -sxz} / dim.x;
     vec3 uy = vec3{0,    1, -syz} / dim.y;
     vec3 uz = vec3{0,    0,    1} / dim.z;
-    
+
     // naive offset
     vec3 dR = position(i) - position(j);
-    
+
     // corrected offset
     dR = (vx * std::remainder(ux.dot(dR), 1) +
           vy * std::remainder(uy.dot(dR), 1) +
           vz * std::remainder(uz.dot(dR), 1));
-    
+
     if (std::abs(dR.dot(vx)) > 0.5*vx.norm2() ||
         std::abs(dR.dot(vy)) > 0.5*vy.norm2() ||
         std::abs(dR.dot(vz)) > 0.5*vz.norm2()) {
@@ -169,25 +181,26 @@ SimpleModel::SimpleModel(int n_sites): Model(n_sites, 2) {
 void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
     H_elems.clear();
     D_elems.clear();
-    
+
     // Hund coupling
-    cx_flt zero = 0;
+    cx_flt zero = {0.0, 0.0};
     for (int i = 0; i < n_sites; i++) {
         for (int s1 = 0; s1 < 2; s1++) {
             for (int s2 = 0; s2 < 2; s2++) {
-                cx_flt v = -pauli[s1][s2].dot(flt(J)*spin[i] + zeeman);
+                cx_flt v = (spin_exist.empty() || spin_exist[i]) ?
+                           -pauli[s1][s2].dot(flt(J)*spin[i] + g_muB_elec * zeeman) : 0.0;
                 H_elems.add(2*i+s1, 2*i+s2, &v);
                 D_elems.add(2*i+s1, 2*i+s2, &zero);
             }
         }
     }
-    
+
     // Hopping terms
     Vec<int> js;
     Vec<double> ts = {t1, t2, t3};
     for (int rank = 0; rank < ts.size(); rank++) {
         if (ts[rank] != 0.0) {
-            cx_flt t = ts[rank];
+            cx_flt t = {static_cast<float>(ts[rank]), 0.0};
             for (int i = 0; i < n_sites; i++) {
                 set_neighbors(rank, i, js);
                 for (int j : js) {
@@ -203,7 +216,7 @@ void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
             }
         }
     }
-    
+
     H.build(H_elems);
     D.build(D_elems);
 }
@@ -211,15 +224,16 @@ void SimpleModel::set_hamiltonian(Vec<vec3> const& spin) {
 void SimpleModel::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& spin, Vec<vec3>& force) {
     // Classical forces
     Model::set_forces(D, spin, force);
-    
+
     // Hund-coupling forces
     for (int i = 0; i < n_sites; i++) {
-        Vec3<cx_flt> dE_dS(0, 0, 0);
+        if (!spin_exist.empty() && !spin_exist[i]) continue;
+        Vec3<cx_flt> dE_dS({0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0});
         for (int s1 = 0; s1 < 2; s1 ++) {
             for (int s2 = 0; s2 < 2; s2 ++) {
                 // Apply chain rule: dE/dS = dH_ij/dS D_ji
                 // where D_ij = dE/dH_ji is the density matrix
-                Vec3<cx_flt> dH_ij_dS = -J * pauli[s1][s2];
+                Vec3<cx_flt> dH_ij_dS = -cx_flt(J, 0.0) * pauli[s1][s2];
                 cx_flt D_ji = *D(2*i+s2, 2*i+s1);
                 dE_dS += dH_ij_dS * D_ji;
             }
@@ -233,9 +247,9 @@ void SimpleModel::set_forces(fkpm::SpMatBsr<cx_flt> const& D, Vec<vec3> const& s
 fkpm::SpMatBsr<cx_flt> SimpleModel::electric_current_operator(Vec<vec3> const& spin, vec3 dir) {
     vec3 d = dimensions();
     double sqrt_vol = sqrt(d.x*d.y*d.z);
-    
+
     fkpm::SpMatElems<cx_flt> j_elems(n_sites*n_orbs, n_sites*n_orbs, 1);
-    cx_flt zero = 0;
+    cx_flt zero = {0.0, 0.0};
     for (int i = 0; i < n_sites*n_orbs; i++) {
         j_elems.add(i, i, &zero);
     }
@@ -261,18 +275,18 @@ fkpm::SpMatBsr<cx_flt> SimpleModel::electric_current_operator(Vec<vec3> const& s
 class LinearModel: public SimpleModel {
 public:
     int w;
-    
+
     LinearModel(int w): SimpleModel(w), w(w) {
     }
-    
+
     vec3 dimensions() {
         return {double(w), 1, 1};
     }
-    
+
     vec3 position(int i) {
         return {double(i), 0, 0};
     }
-    
+
     void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
         if (name == "ferro") {
             spin.assign(n_sites, {0, 0, 1});
@@ -282,7 +296,7 @@ public:
             std::exit(EXIT_FAILURE);
         }
     }
-    
+
     void set_neighbors(int rank, int i, Vec<int>& idx) {
         struct Delta {int x;};
         static Vec<Vec<Delta>> deltas {
@@ -297,7 +311,7 @@ public:
             idx[n] = positive_mod(i + d[n].x, w);
         }
     }
-    
+
     Vec<int> groups(int n_colors) {
         n_colors = std::min(n_colors, n_sites);
         if (n_sites % n_colors != 0) {
@@ -320,21 +334,21 @@ std::unique_ptr<SimpleModel> SimpleModel::mk_linear(int w) {
 class SquareModel: public SimpleModel {
 public:
     int w, h;
-    
+
     SquareModel(int w, int h): SimpleModel(w*h), w(w), h(h) {
     }
-    
+
     vec3 dimensions() {
         return {double(w), double(h), 1};
     }
-    
+
     vec3 position(int i) {
         assert(0 <= i && i < w*h);
         double x = i % w;
         double y = i / w;
         return {x, y, 0};
     }
-    
+
     void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
         if (name == "ferro") {
             spin.assign(n_sites, {0, 0, 1});
@@ -347,7 +361,7 @@ public:
             std::exit(EXIT_FAILURE);
         }
     }
-    
+
     void set_spins_meron(double a, int q, Vec<vec3>& spin) {
         assert(w % h == 0); // need periodicity in both dimensions
         double b = sqrt(1.0-(a*a));
@@ -373,7 +387,7 @@ public:
             spin[i].z =b*sin(q2_phase);
         }
     }
-    
+
     void set_neighbors(int rank, int i, Vec<int>& idx) {
         struct Delta {int x; int y;};
         static Vec<Vec<Delta>> deltas {
@@ -383,7 +397,7 @@ public:
         };
         assert(0 <= rank && rank < deltas.size());
         auto d = deltas[rank];
-        
+
         int x = i % w;
         int y = i / w;
         idx.resize(d.size());
@@ -393,7 +407,7 @@ public:
             idx[n] = xp + yp*w;
         }
     }
-    
+
     Vec<int> groups(int n_colors) {
         n_colors = std::min(n_colors, n_sites);
         int c_len = int(sqrt(n_colors));
@@ -427,14 +441,14 @@ std::unique_ptr<SimpleModel> SimpleModel::mk_square(int w, int h) {
 class TriangularModel: public SimpleModel {
 public:
     int w, h;
-    
+
     TriangularModel(int w, int h): SimpleModel(w*h), w(w), h(h) {
     }
-    
+
     vec3 dimensions() {
         return {double(w), 0.5*sqrt(3.0)*h, 1};
     }
-    
+
     vec3 position(int i) {
         assert(0 <= i && i < w*h);
         double x = i % w;
@@ -443,13 +457,13 @@ public:
         double b = 0.5*sqrt(3.0)*a;    // vertical distance between rows
         return {a*x + TRIANGULAR_SHEAR_DIRECTION * 0.5*a*y, b*y, 0};
     }
-    
+
     void pbc_shear(double& xy, double& xz, double& yz) {
         xy = TRIANGULAR_SHEAR_DIRECTION * 1.0/sqrt(3.0);
         xz = yz = 0.0;
     }
-    
-    
+
+
     void set_spins_3q(Vec<vec3> b, Vec<vec3>& spin) {
         for (int i = 0; i < n_sites; i++) {
             int x = i%w;
@@ -465,33 +479,33 @@ public:
             }
         }
     }
-    
+
     void set_spins_hexagonal_vortices() {
         vec3 Q1 { 4.0*Pi/7.0, -8.0*Pi/(7.0*sqrt(3.0)), 0.0};
         vec3 Q2 {-6.0*Pi/7.0, -2.0*Pi/(7.0*sqrt(3.0)), 0.0};
         vec3 Q3 { 2.0*Pi/7.0, 10.0*Pi/(7.0*sqrt(3.0)), 0.0};
-        
+
         double d1 = 0.60162300894888405;
         double d2 = 0.45768802314662158;
         vec3 Delta1 = 1.0 * vec3{ d1,                                d2, 1e-6};
         vec3 Delta2 = 0.5 * vec3{-d1 + sqrt(3.0)*d2, -sqrt(3.0)*d1 - d2, 1e-6};
         vec3 Delta3 = 0.5 * vec3{-d1 - sqrt(3.0)*d2,  sqrt(3.0)*d1 - d2, 1e-6};
-        
+
         for (int i = 0; i < n_sites; i++) {
             vec3 x = position(i);
             spin[i] = Delta1 * sin(Q1.dot(x)) + Delta2 * sin(Q2.dot(x)) + Delta3 * sin(Q3.dot(x));
         }
     }
-    
+
     void set_spins_collinear_stripes() {
         vec3 Q {Pi, 0, 0};
-        
+
         for (int i = 0; i < n_sites; i++) {
             vec3 x = position(i);
             spin[i] = {0, 0, sin(Q.dot(x))+cos(Q.dot(x))};
         }
     }
-    
+
     void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
         if (name == "ferro") {
             spin.assign(n_sites, {0, 0, 1});
@@ -510,7 +524,7 @@ public:
             std::exit(EXIT_FAILURE);
         }
     }
-    
+
     void set_neighbors(int rank, int i, Vec<int>& idx) {
         struct Delta {int x; int y;};
         static Vec<Vec<Delta>> deltas {
@@ -536,7 +550,7 @@ public:
         };
         assert(0 <= rank && rank < deltas.size());
         auto d = deltas[rank];
-        
+
         int x = i % w;
         int y = i / w;
         idx.resize(d.size());
@@ -546,7 +560,7 @@ public:
             idx[n] = xp + yp*w;
         }
     }
-    
+
     Vec<int> groups(int n_colors) {
         n_colors = std::min(n_colors, n_sites);
         int c_len = int(sqrt(n_colors));
@@ -577,14 +591,14 @@ std::unique_ptr<SimpleModel> SimpleModel::mk_triangular(int w, int h) {
 class KagomeModel: public SimpleModel {
 public:
     int w, h;
-    
+
     KagomeModel(int w, int h): SimpleModel(3*w*h), w(w), h(h) {
     }
-    
+
     vec3 dimensions() {
         return {2.0*w, sqrt(3.0)*h, 1};
     }
-    
+
     //
     //         1         1         1
     //        /D\       /E\       /F\
@@ -605,12 +619,12 @@ public:
         double theta = -Pi/6 + (2*Pi/3)*v;    // angle from letter to number
         return {a*x + 0.5*a*y + r*cos(theta), b*y + r*sin(theta), 0};
     }
-    
+
     void pbc_shear(double& xy, double& xz, double& yz) {
         xy = 1.0/sqrt(3.0);
         xz = yz = 0.0;
     }
-    
+
     void set_spins_3q(Vec<Vec<vec3>> b, Vec<vec3>& spin) {
         for (int i = 0; i < n_sites; i++) {
             int v = i%3;
@@ -630,7 +644,7 @@ public:
             spin[i] = s.normalized();
         }
     }
-    
+
     void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
         if (name == "ferro") {
             spin.assign(n_sites, {0, 0, 1});
@@ -663,7 +677,7 @@ public:
             std::exit(EXIT_FAILURE);
         }
     }
-    
+
     void set_neighbors(int rank, int k, Vec<int>& idx) {
         if (rank != 0) {
             std::cerr << "Only nearest neighbors supported on kagome lattice\n";
@@ -673,13 +687,13 @@ public:
         int v = k%3;
         int x = (k/3)%w;
         int y = k/(3*w);
-        
+
         auto coord2idx = [&](int v, int x, int y) -> int {
             int xp = (x%w+w)%w;
             int yp = (y%h+h)%h;
             return v + xp*(3) + yp*(3*w);
         };
-        
+
         if (v == 0) {
             //     1
             //    /D\       /E
@@ -715,7 +729,7 @@ public:
             idx[3] = coord2idx(1, x+0, y-1);
         }
     }
-    
+
     Vec<int> groups(int n_colors) {
         n_colors = std::min(n_colors, n_sites);
         if (n_colors%3 != 0) {
@@ -751,14 +765,14 @@ std::unique_ptr<SimpleModel> SimpleModel::mk_kagome(int w, int h) {
 class CubicModel: public SimpleModel {
 public:
     int lx, ly, lz;
-    
+
     CubicModel(int lx, int ly, int lz): SimpleModel(lx*ly*lz), lx(lx), ly(ly), lz(lz) {
     }
-    
+
     vec3 dimensions() {
         return {double(lx), double(ly), double(lz)};
     }
-    
+
     vec3 position(int i) {
         assert(0 <= i && i < lx*ly*lz);
         double x = (i % lx);
@@ -766,7 +780,7 @@ public:
         double z = (i / lx)/ ly;
         return {x, y, z};
     }
-    
+
     void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
         if (name == "ferro") {
             spin.assign(n_sites, vec3{0, 0, 1});
@@ -789,7 +803,7 @@ public:
             std::exit(EXIT_FAILURE);
         }
     }
-    
+
     void set_neighbors(int rank, int i, Vec<int>& idx) {
         struct Delta {int x; int y; int z;};
         static Vec<Vec<Delta>> deltas {
@@ -799,7 +813,7 @@ public:
         };
         assert(0 <= rank && rank < deltas.size());
         auto d = deltas[rank];
-        
+
         int x = (i%lx);
         int y = (i/lx)%ly;
         int z = (i/lx)/ly;
@@ -811,7 +825,7 @@ public:
             idx[n] = (zp*ly + yp)*lx + xp;
         }
     }
-    
+
     Vec<int> groups(int n_colors) {
         n_colors = std::min(n_colors, n_sites);
         int c_len = int(std::cbrt(n_colors));
@@ -842,4 +856,850 @@ std::unique_ptr<SimpleModel> SimpleModel::mk_cubic(int w, int h, int h_z) {
     return std::make_unique<CubicModel>(w, h, h_z);
 }
 
+class PyrochloreModel: public SimpleModel {
+public:
+    int lx, ly, lz;
 
+    PyrochloreModel(int lx, int ly, int lz): SimpleModel(4*lx*ly*lz), lx(lx), ly(ly), lz(lz) {
+    }
+
+    vec3 dimensions() {
+        std::cerr << "Incorrect implementation here. To be modified" << std::endl;
+        return {1.0 * lx, 1.0 * ly, 1.0 * lz};
+    }
+
+    // idx = sub + (i + (j + k * ly) * lx) * 4
+    void idx2coor(int &i, int &j, int &k, int &sub, int idx) const {
+        assert(idx >= 0 && idx < n_sites);
+        sub  = idx % 4;
+        idx /= 4;
+        i    = idx % lx;
+        idx /= lx;
+        j    = idx % ly;
+        k    = idx / ly;
+    }
+
+    void coor2idx(int i, int j, int k, const int &sub, int &idx) const {
+        assert(sub >= 0 && sub < 4);
+        while (i < 0) i += lx;
+        if (i >= lx)  i  = i % lx;
+        while (j < 0) j += ly;
+        if (j >= ly)  j  = j % ly;
+        while (k < 0) k += lz;
+        if (k >= lz)  k  = k % lz;
+        idx = sub + (i + (j + k * ly) * lx) * 4;
+    }
+
+    vec3 position(int i) {
+        int i_1, i_2, i_3, sub;
+        idx2coor(i_1, i_2, i_3, sub, i);
+        vec3 res = {0.5 * (i_2 + i_3), 0.5 * (i_1 + i_3), 0.5 * (i_1 + i_2)};
+        switch (sub) {
+            case 0:
+                res.x += 0.25;
+                res.y += 0.25;
+                res.z += 0.25;
+                break;
+            case 1:
+                res.x += 0.25;
+                res.y += 0.50;
+                res.z += 0.50;
+                break;
+            case 2:
+                res.x += 0.50;
+                res.y += 0.25;
+                res.z += 0.50;
+                break;
+            case 3:
+                res.x += 0.50;
+                res.y += 0.50;
+                res.z += 0.25;
+                break;
+        }
+        return res;
+    }
+
+    void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
+        if (name == "ferro") {
+            spin.assign(n_sites, {0, 0, 1});
+        } else {
+            std::cerr << "Unknown configuration type `" << name << "`\n";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
+    void set_neighbors(int rank, int site0, Vec<int>& idx) {
+        if (rank >= 1) {
+            std::cerr << "Only up to 1st nearest neighbors supported on pyrochlore (fcc version) lattice\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (rank == 0) {
+            idx.resize(6);
+        }
+
+        int i, j, k, sub;
+        idx2coor(i, j, k, sub, site0);
+        int site1;
+
+        if (rank == 0) {
+            switch (sub) {
+                case 0:
+                    idx[0] = site0 + 1;
+                    idx[1] = site0 + 2;
+                    idx[2] = site0 + 3;
+                    coor2idx(i - 1, j,     k,     1, site1); idx[3] = site1;
+                    coor2idx(i,     j - 1, k,     2, site1); idx[4] = site1;
+                    coor2idx(i,     j,     k - 1, 3, site1); idx[5] = site1;
+                    break;
+                case 1:
+                    idx[0] = site0 - 1;
+                    idx[1] = site0 + 1;
+                    idx[2] = site0 + 2;
+                    coor2idx(i + 1, j,     k,     0, site1); idx[3] = site1;
+                    coor2idx(i + 1, j - 1, k,     2, site1); idx[4] = site1;
+                    coor2idx(i + 1, j,     k - 1, 3, site1); idx[5] = site1;
+                    break;
+                case 2:
+                    idx[0] = site0 - 2;
+                    idx[1] = site0 - 1;
+                    idx[2] = site0 + 1;
+                    coor2idx(i,     j + 1, k,     0, site1); idx[3] = site1;
+                    coor2idx(i - 1, j + 1, k,     1, site1); idx[4] = site1;
+                    coor2idx(i,     j + 1, k - 1, 3, site1); idx[5] = site1;
+                    break;
+                case 3:
+                    idx[0] = site0 - 3;
+                    idx[1] = site0 - 2;
+                    idx[2] = site0 - 1;
+                    coor2idx(i,     j,     k + 1, 0, site1); idx[3] = site1;
+                    coor2idx(i - 1, j,     k + 1, 1, site1); idx[4] = site1;
+                    coor2idx(i,     j - 1, k + 1, 2, site1); idx[5] = site1;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+    }
+
+    Vec<int> groups(int n_colors) {
+        n_colors = std::min(n_colors, n_sites);
+        if (n_colors%4 != 0) {
+            std::cerr << "n_colors=" << n_colors << " is not a multiple of 4\n";
+            std::exit(EXIT_FAILURE);
+        }
+        int c_len = int(cbrt(n_colors/4));
+        if (c_len*c_len*c_len != n_colors/4) {
+            std::cerr << "n_colors/4=" << n_colors/4 << " is not a perfect cube\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (lx % c_len != 0 || ly % c_len != 0 || lz % c_len != 0) {
+            std::cerr << "cbrt(n_colors/4)=" << c_len << " is not a divisor of lattice size (lx,ly,lz)=("
+                      << lx << "," << ly << "," << lz << ")\n";
+            std::exit(EXIT_FAILURE);
+        }
+        Vec<int> colors(n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            int x, y, z, sub;
+            idx2coor(x, y, z, sub, i);
+            int cx = x%c_len;
+            int cy = y%c_len;
+            int cz = z%c_len;
+            colors[i] = 4*(cx+(cy+cz*c_len)*c_len) + sub;
+        }
+        return colors_to_groups(colors);
+    }
+
+};
+std::unique_ptr<SimpleModel> SimpleModel::mk_pyrochlore(int lx, int ly, int lz) {
+    return std::make_unique<PyrochloreModel>(lx, ly, lz);
+}
+
+class PyrochloreCubicModel: public SimpleModel {
+public:
+    int lx, ly, lz;
+
+    PyrochloreCubicModel(int lx, int ly, int lz): SimpleModel(16*lx*ly*lz), lx(lx), ly(ly), lz(lz) {
+    }
+
+    vec3 dimensions() {
+        return {1.0 * lx, 1.0 * ly, 1.0 * lz};
+    }
+
+    // idx = sub + (cell + (i + (j + k * ly) * lx) * 4 ) * 4
+    void idx2coor(int &i, int &j, int &k, int &cell, int &sub, int idx) const {
+        assert(idx >= 0 && idx < n_sites);
+        sub  = idx % 4;
+        idx /= 4;
+        cell = idx % 4;
+        idx /= 4;
+        i    = idx % lx;
+        idx /= lx;
+        j    = idx % ly;
+        k    = idx / ly;
+    }
+
+    void coor2idx(int i, int j, int k, const int &cell, const int &sub, int &idx) const {
+        assert(cell >= 0 && cell < 4);
+        assert(sub >= 0 && sub < 4);
+        while (i < 0) i += lx;
+        if (i >= lx)  i  = i % lx;
+        while (j < 0) j += ly;
+        if (j >= ly)  j  = j % ly;
+        while (k < 0) k += lz;
+        if (k >= lz)  k  = k % lz;
+        idx = sub + (cell + (i + (j + k * ly) * lx) * 4 ) * 4;
+    }
+
+    vec3 position(int i) {
+        int i_1, i_2, i_3, cell, sub;
+        idx2coor(i_1, i_2, i_3, cell, sub, i);
+        vec3 res = {1.0 * i_1, 1.0 * i_2, 1.0 * i_3};
+        switch (cell) {
+            case 0:
+                res.x += 0.25;
+                res.y += 0.25;
+                res.z += 0.25;
+                break;
+            case 1:
+                res.x += 0.25;
+                res.y += 0.75;
+                res.z += 0.75;
+                break;
+            case 2:
+                res.x += 0.75;
+                res.y += 0.25;
+                res.z += 0.75;
+                break;
+            case 3:
+                res.x += 0.75;
+                res.y += 0.75;
+                res.z += 0.25;
+                break;
+        }
+        switch (sub) {
+            case 0:
+                break;
+            case 1:
+                res.y += 0.25;
+                res.z += 0.25;
+                break;
+            case 2:
+                res.x += 0.25;
+                res.z += 0.25;
+                break;
+            case 3:
+                res.x += 0.25;
+                res.y += 0.25;
+                break;
+        }
+        return res;
+    }
+
+    void set_spins(std::string const& name, const toml_ptr params, Vec<vec3>& spin) {
+        if (name == "ferro") {
+            spin.assign(n_sites, {0, 0, 1});
+        } else {
+            std::cerr << "Unknown configuration type `" << name << "`\n";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
+    void set_neighbors(int rank, int site0, Vec<int>& idx) {
+        if (rank >= 3) {
+            std::cerr << "Only up to 3rd nearest neighbors supported on pyrochlore (cubic version) lattice\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (rank == 0) {
+            idx.resize(6);
+        } else if (rank == 1) {
+            idx.resize(12);
+        } else {
+            idx.resize(6);
+        }
+
+        int i, j, k, cell, sub;
+        idx2coor(i, j, k, cell, sub, site0);
+        int site1;
+
+        if (rank == 0) {
+            switch (sub) {
+                case 0:
+                    idx[0] = site0 + 1;
+                    idx[1] = site0 + 2;
+                    idx[2] = site0 + 3;
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i,     j - 1, k - 1, 1, 1, site1); idx[3] = site1;
+                            coor2idx(i - 1, j,     k - 1, 2, 2, site1); idx[4] = site1;
+                            coor2idx(i - 1, j - 1, k,     3, 3, site1); idx[5] = site1;
+                            break;
+                        case 1:
+                            idx[3] = site0 - 3;
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i-1, j,   k,   3, 2
+                            break;
+                        case 2:
+                            idx[3] = site0 - 6;
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 6;                                      // i,   j-1, k,   3, 1
+                            break;
+                        case 3:
+                            idx[3] = site0 - 9;
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i,   j,   k-1, 2, 1
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 1:
+                    idx[0] = site0 - 1;
+                    idx[1] = site0 + 1;
+                    idx[2] = site0 + 2;
+                    switch (cell) {
+                        case 0:
+                            idx[3] = site0 + 3;
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i-1, j,   k,   3, 2
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j + 1, k,     2, 2, site1); idx[3] = site1;
+                            coor2idx(i - 1, j,     k + 1, 3, 3, site1); idx[4] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 0, site1); idx[5] = site1;
+                            break;
+                        case 2:
+                            idx[3] = site0 - 3;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 9;                                      // i,   j,   k+1, 3, 0
+                            break;
+                        case 3:
+                            idx[3] = site0 - 6;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 6;                                      // i,   j+1, k,   2, 0, site1
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 2:
+                    idx[0] = site0 - 2;
+                    idx[1] = site0 - 1;
+                    idx[2] = site0 + 1;
+                    switch (cell) {
+                        case 0:
+                            idx[3] = site0 + 6;
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 6;                                      // i,   j-1, k,   3, 1
+                            break;
+                        case 1:
+                            idx[3] = site0 + 3;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 9;                                      // i,   j,   k+1, 3, 0
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k + 1, 3, 3, site1); idx[3] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 0, site1); idx[4] = site1;
+                            coor2idx(i + 1, j - 1, k,     1, 1, site1); idx[5] = site1;
+                            break;
+                        case 3:
+                            idx[3] = site0 - 3;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i+1, j,   k,   1, 0
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 3:
+                    idx[0] = site0 - 3;
+                    idx[1] = site0 - 2;
+                    idx[2] = site0 - 1;
+                    switch (cell) {
+                        case 0:
+                            idx[3] = site0 + 9;
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i,   j,   k-1, 2, 1
+                            break;
+                        case 1:
+                            idx[3] = site0 + 6;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 6;                                      // i,   j+1, k,   2, 0
+                            break;
+                        case 2:
+                            idx[3] = site0 + 3;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[4] = site1;
+                            idx[5] = idx[4] + 3;                                      // i+1, j,   k,   1, 0
+                            break;
+                        case 3:
+                            coor2idx(i + 1, j + 1, k,     0, 0, site1); idx[3] = site1;
+                            coor2idx(i + 1, j,     k - 1, 1, 1, site1); idx[4] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 2, site1); idx[5] = site1;
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        } else if (rank == 1) {
+            switch (sub) {
+                case 0:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[4] = site1;
+                            coor2idx(i,     j - 1, k - 1, 1, 2, site1); idx[6] = site1;
+                            coor2idx(i - 1, j,     k - 1, 2, 1, site1); idx[8] = site1;
+                            coor2idx(i - 1, j - 1, k,     3, 1, site1); idx[10] = site1;
+                            idx[1] = idx[0] + 3;                                      // i-1, j,   k,   3, 2
+                            idx[3] = idx[2] + 6;                                      // i,   j-1, k,   3, 1
+                            idx[5] = idx[4] + 3;                                      // i,   j,   k-1, 2, 1
+                            idx[7] = idx[6] + 1;                                      // i,   j-1, k-1, 1, 3
+                            idx[9] = idx[8] + 2;                                      // i-1, j,   k-1, 2, 3
+                            idx[11] = idx[10] + 1;                                    // i-1, j-1, k,   3, 2
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k + 1, 3, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[1] = site1;
+                            coor2idx(i - 1, j + 1, k,     2, 2, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[3] = site1;
+                            coor2idx(i - 1, j,     k,     2, 1, site1); idx[8] = site1;
+                            idx[4] = site0 - 2;                                        // i,   j,   k,   0, 2
+                            idx[5] = idx[4] + 1;                                      // i,   j,   k,   0, 3
+                            idx[6] = idx[4] + 7;                                      // i,   j,   k,   2, 1
+                            idx[7] = idx[4] + 11;                                     // i,   j,   k,   3, 1
+                            idx[9] = idx[8] + 1;                                      // i-1, j,   k,   2, 2
+                            idx[10] = idx[8] + 4;                                     // i-1, j,   k,   3, 1
+                            idx[11] = idx[8] + 6;                                     // i-1, j,   k,   3, 3
+                            break;
+                        case 2:
+                            coor2idx(i + 1, j - 1, k,     1, 1, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k + 1, 3, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[3] = site1;
+                            coor2idx(i,     j - 1, k,     1, 1, site1); idx[4] = site1;
+                            idx[8] = site0 - 7;                                        // i,   j,   k,   0, 1
+                            idx[5] = idx[4] + 1;                                      // i,   j-1, k,   1, 2
+                            idx[6] = idx[4] + 9;                                      // i,   j-1, k,   3, 2
+                            idx[7] = idx[4] + 10;                                     // i,   j-1, k,   3, 3
+                            idx[9] = idx[8] + 2;                                      // i,   j,   k,   0, 3
+                            idx[10] = idx[8] + 5;                                     // i,   j,   k,   1, 2
+                            idx[11] = idx[8] + 13;                                    // i,   j,   k,   3, 2
+                            break;
+                        case 3:
+                            coor2idx(i + 1, j,     k - 1, 1, 1, site1); idx[0] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 2, site1); idx[1] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[3] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 1, site1); idx[4] = site1;
+                            idx[8] = site0 - 11;                                       // i,   j,   k,   0, 1
+                            idx[5] = idx[4] + 2;                                      // i,   j,   k-1, 1, 3
+                            idx[6] = idx[4] + 5;                                      // i,   j,   k-1, 2, 2
+                            idx[7] = idx[4] + 6;                                      // i,   j,   k-1, 2, 3
+                            idx[9] = idx[8] + 1;                                      // i,   j,   k,   0, 2
+                            idx[10] = idx[8] + 6;                                     // i,   j,   k,   1, 3
+                            idx[11] = idx[8] + 10;                                    // i,   j,   k,   2, 3
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 1:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i - 1, j,     k - 1, 2, 2, site1); idx[0] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[1] = site1;
+                            coor2idx(i - 1, j - 1, k,     3, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[3] = site1;
+                            coor2idx(i - 1, j,     k,     2, 0, site1); idx[8] = site1;
+                            idx[4] = site0 + 5;                                        // i,   j,   k,   1, 2
+                            idx[5] = idx[4] + 1;                                      // i,   j,   k,   1, 3
+                            idx[6] = idx[4] + 2;                                      // i,   j,   k,   2, 0
+                            idx[7] = idx[4] + 6;                                      // i,   j,   k,   3, 0
+                            idx[9] = idx[8] + 2;                                      // i-1, j,   k,   2, 2
+                            idx[10] = idx[8] + 4;                                     // i-1, j,   k,   3, 0
+                            idx[11] = idx[8] + 7;                                     // i-1, j,   k,   3, 3
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[0] = site1;
+                            coor2idx(i - 1, j + 1, k,     2, 0, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[4] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[6] = site1;
+                            coor2idx(i - 1, j,     k + 1, 3, 0, site1); idx[8] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 2, site1); idx[10] = site1;
+                            idx[1] = idx[0] + 3;                                      // i-1, j,   k,   3, 2
+                            idx[3] = idx[2] + 3;                                      // i-1, j+1, k,   2, 3
+                            idx[5] = idx[4] + 6;                                      // i,   j+1, k,   2, 0
+                            idx[7] = idx[6] + 9;                                      // i,   j,   k+1, 3, 0
+                            idx[9] = idx[8] + 2;                                      // i-1, j,   k+1, 3, 2
+                            idx[11] = idx[10] + 1;                                    // i,   j+1, k+1, 0, 3
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k,     1, 0, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k + 1, 3, 3, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 7;                                        // i,   j,   k,   0, 2
+                            idx[5] = idx[4] + 2;                                      // i,   j,   k,   1, 0
+                            idx[6] = idx[4] + 5;                                      // i,   j,   k,   1, 3
+                            idx[7] = idx[4] + 12;                                     // i,   j,   k,   3, 2
+                            idx[9] = idx[8] + 2;                                      // i,   j,   k+1, 0, 2
+                            idx[10] = idx[8] + 14;                                    // i,   j,   k+1, 3, 2
+                            idx[11] = idx[8] + 15;                                    // i,   j,   k+1, 3, 3
+                            break;
+                        case 3:
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k,     1, 0, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 2, site1); idx[2] = site1;
+                            coor2idx(i + 1, j + 1, k,     0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j + 1, k,     0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 10;                                       // i,   j,   k,   0, 3
+                            idx[5] = idx[4] + 1;                                      // i,   j,   k,   1, 0
+                            idx[6] = idx[4] + 3;                                      // i,   j,   k,   1, 2
+                            idx[7] = idx[4] + 8;                                      // i,   j,   k,   2, 3
+                            idx[9] = idx[8] + 3;                                      // i,   j+1, k,   0, 3
+                            idx[10] = idx[8] + 10;                                    // i,   j+1, k,   2, 2
+                            idx[11] = idx[8] + 11;                                    // i,   j+1, k,   2, 3
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 2:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i - 1, j - 1, k,     3, 3, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k - 1, 1, 1, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k - 1, 2, 1, site1); idx[3] = site1;
+                            coor2idx(i,     j - 1, k,     1, 0, site1); idx[4] = site1;
+                            idx[8] = site0 + 2;                                        // i,   j,   k,   1, 0
+                            idx[5] = idx[4] + 1;                                      // i,   j-1, k,   1, 1
+                            idx[6] = idx[4] + 8;                                      // i,   j-1, k,   3, 0
+                            idx[7] = idx[4] + 11;                                     // i,   j-1, k,   3, 3
+                            idx[9] = idx[8] + 5;                                      // i,   j,   k,   2, 1
+                            idx[10] = idx[8] + 7;                                     // i,   j,   k,   2, 3
+                            idx[11] = idx[8] + 8;                                     // i,   j,   k,   3, 0
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j + 1, k,     2, 0, site1); idx[1] = site1;
+                            coor2idx(i - 1, j,     k + 1, 3, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 5;                                        // i,   j,   k,   0, 1
+                            idx[5] = idx[4] + 7;                                      // i,   j,   k,   2, 0
+                            idx[6] = idx[4] + 10;                                     // i,   j,   k,   2, 3
+                            idx[7] = idx[4] + 12;                                     // i,   j,   k,   3, 1
+                            idx[9] = idx[8] + 1;                                      // i,   j,   k+1, 0, 1
+                            idx[10] = idx[8] + 13;                                    // i,   j,   k+1, 3, 1
+                            idx[11] = idx[8] + 15;                                    // i,   j,   k+1, 3, 3
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[0] = site1;
+                            coor2idx(i + 1, j - 1, k,     1, 0, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[4] = site1;
+                            coor2idx(i,     j - 1, k + 1, 3, 0, site1); idx[6] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[8] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 1, site1); idx[10] = site1;
+                            idx[1] = idx[0] + 6;                                      // i,   j-1, k,   3, 1
+                            idx[3] = idx[2] + 3;                                      // i+1, j-1, k,   1, 3
+                            idx[5] = idx[4] + 3;                                      // i+1, j,   k,   1, 0
+                            idx[7] = idx[6] + 1;                                      // i,   j-1, k+1, 3, 1
+                            idx[9] = idx[8] + 9;                                      // i,   j,   k+1, 3, 0
+                            idx[11] = idx[10] + 2;                                    // i+1, j,   k+1, 0, 3
+                            break;
+                        case 3:
+                            coor2idx(i,     j,     k - 1, 2, 1, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k - 1, 1, 1, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k,     2, 0, site1); idx[2] = site1;
+                            coor2idx(i + 1, j + 1, k,     0, 0, site1); idx[3] = site1;
+                            coor2idx(i + 1, j,     k,     0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 11;                                       // i,   j,   k,   0, 3
+                            idx[5] = idx[4] + 4;                                      // i,   j,   k,   1, 3
+                            idx[6] = idx[4] + 5;                                      // i,   j,   k,   2, 0
+                            idx[7] = idx[4] + 6;                                      // i,   j,   k,   2, 1
+                            idx[9] = idx[8] + 3;                                      // i+1, j,   k,   0, 3
+                            idx[10] = idx[8] + 5;                                     // i+1, j,   k,   1, 1
+                            idx[11] = idx[8] + 7;                                     // i+1, j,   k,   1, 3
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 3:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i,     j - 1, k - 1, 1, 1, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k - 1, 2, 2, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k,     3, 1, site1); idx[2] = site1;
+                            coor2idx(i - 1, j,     k,     3, 2, site1); idx[3] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 0, site1); idx[8] = site1;
+                            idx[4] = site0 + 1;                                        // i,   j,   k,   1, 0
+                            idx[5] = idx[4] + 4;                                      // i,   j,   k,   2, 0
+                            idx[6] = idx[4] + 9;                                      // i,   j,   k,   3, 1
+                            idx[7] = idx[4] + 10;                                     // i,   j,   k,   3, 2
+                            idx[9] = idx[8] + 1;                                      // i,   j,   k-1, 1, 1
+                            idx[10] = idx[8] + 4;                                     // i,   j,   k-1, 2, 0
+                            idx[11] = idx[8] + 6;                                     // i,   j,   k-1, 2, 2
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k,     3, 2, site1); idx[0] = site1;
+                            coor2idx(i - 1, j + 1, k,     2, 2, site1); idx[1] = site1;
+                            coor2idx(i,     j,     k + 1, 3, 0, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j + 1, k,     0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 6;                                        // i,   j,   k,   0, 1
+                            idx[5] = idx[4] + 8;                                      // i,   j,   k,   2, 1
+                            idx[6] = idx[4] + 11;                                     // i,   j,   k,   3, 0
+                            idx[7] = idx[4] + 13;                                     // i,   j,   k,   3, 2
+                            idx[9] = idx[8] + 1;                                      // i,   j+1, k,   0, 1
+                            idx[10] = idx[8] + 9;                                     // i,   j+1, k,   2, 1
+                            idx[11] = idx[8] + 10;                                    // i,   j+1, k,   2, 2
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k,     3, 1, site1); idx[0] = site1;
+                            coor2idx(i + 1, j - 1, k,     1, 1, site1); idx[1] = site1;
+                            coor2idx(i,     j,     k + 1, 3, 0, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i + 1, j,     k,     0, 0, site1); idx[8] = site1;
+                            idx[4] = site0 - 9;                                        // i,   j,   k,   0, 2
+                            idx[5] = idx[4] + 4;                                      // i,   j,   k,   1, 2
+                            idx[6] = idx[4] + 10;                                     // i,   j,   k,   3, 0
+                            idx[7] = idx[4] + 11;                                     // i,   j,   k,   3, 1
+                            idx[9] = idx[8] + 2;                                      // i+1, j,   k,   0, 2
+                            idx[10] = idx[8] + 5;                                     // i+1, j,   k,   1, 1
+                            idx[11] = idx[8] + 6;                                     // i+1, j,   k,   1, 2
+                            break;
+                        case 3:
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k - 1, 1, 0, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 0, site1); idx[4] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[6] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[8] = site1;
+                            coor2idx(i + 1, j + 1, k,     0, 1, site1); idx[10] = site1;
+                            idx[1] = idx[0] + 3;                                      // i,   j,   k-1, 2, 1
+                            idx[3] = idx[2] + 2;                                      // i+1, j,   k-1, 1, 2
+                            idx[5] = idx[4] + 1;                                      // i,   j+1, k-1, 2, 1
+                            idx[7] = idx[6] + 3;                                      // i+1, j,   k,   1, 0
+                            idx[9] = idx[8] + 6;                                      // i,   j+1, k,   2, 0
+                            idx[11] = idx[10] + 1;                                    // i+1, j+1, k,   0, 2
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        } else {
+            switch (sub) {
+                case 0:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i,     j - 1, k - 1, 1, 0, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k - 1, 2, 0, site1); idx[1] = site1;
+                            coor2idx(i - 1, j - 1, k,     3, 0, site1); idx[2] = site1;
+                            idx[3] = site0 + 4;                                        // i,   j,   k,   1, 0
+                            idx[4] = site0 + 8;                                        // i,   j,   k,   2, 0
+                            idx[5] = site0 + 12;                                       // i,   j,   k,   3, 0
+                            break;
+                        case 1:
+                            coor2idx(i,     j + 1, k,     2, 0, site1); idx[1] = site1;
+                            coor2idx(i,     j,     k + 1, 3, 0, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i - 1, j,     k,     2, 0, site1); idx[4] = site1;
+                            idx[0] = site0 - 4;                                        // i,   j,   k,   0, 0
+                            idx[5] = idx[4] + 4;                                      // i-1, j,   k,   3, 0
+                            break;
+                        case 2:
+                            coor2idx(i + 1, j,     k,     1, 0, site1); idx[1] = site1;
+                            coor2idx(i,     j,     k + 1, 3, 0, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j - 1, k,     1, 0, site1); idx[4] = site1;
+                            idx[0] = site0 - 8;                                        // i,   j,   k,   0, 0
+                            idx[5] = idx[4] + 8;                                      // i,   j-1, k,   3, 0
+                            break;
+                        case 3:
+                            coor2idx(i + 1, j,     k,     1, 0, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k,     2, 0, site1); idx[2] = site1;
+                            coor2idx(i + 1, j + 1, k,     0, 0, site1); idx[3] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 0, site1); idx[4] = site1;
+                            idx[0] = site0 - 12;                                       // i,   j,   k,   0, 0
+                            idx[5] = idx[4] + 4;                                      // i,   j,   k-1, 2, 0
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 1:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i,     j - 1, k - 1, 1, 1, site1); idx[0] = site1;
+                            coor2idx(i,     j,     k - 1, 2, 1, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k,     3, 1, site1); idx[2] = site1;
+                            coor2idx(i - 1, j,     k,     2, 1, site1); idx[4] = site1;
+                            idx[3] = site0 + 4;                                        // i,   j,   k,   1, 1
+                            idx[5] = idx[4] + 4;                                      // i-1, j,   k,   3, 1
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j + 1, k,     2, 1, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k + 1, 3, 1, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k + 1, 0, 1, site1); idx[2] = site1;
+                            idx[3] = site0 - 4;                                        // i,   j,   k,   0, 1
+                            idx[4] = site0 + 4;                                        // i,   j,   k,   2, 1
+                            idx[5] = site0 + 8;                                        // i,   j,   k,   3, 1
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k,     3, 1, site1); idx[0] = site1;
+                            coor2idx(i + 1, j - 1, k,     1, 1, site1); idx[1] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 1, site1); idx[4] = site1;
+                            idx[3] = site0 - 4;                                        // i,   j,   k,   1, 1
+                            idx[5] = idx[4] + 12;                                     // i,   j,   k+1, 3, 1
+                            break;
+                        case 3:
+                            coor2idx(i,     j,     k - 1, 2, 1, site1); idx[0] = site1;
+                            coor2idx(i + 1, j,     k - 1, 1, 1, site1); idx[1] = site1;
+                            coor2idx(i + 1, j,     k,     0, 1, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k,     0, 1, site1); idx[4] = site1;
+                            idx[3] = site0 - 8;                                        // i,   j,   k,   1, 1
+                            idx[5] = idx[4] + 8;                                      // i,   j+1, k,   2, 1
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 2:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k - 1, 2, 2, site1); idx[1] = site1;
+                            coor2idx(i - 1, j,     k,     3, 2, site1); idx[2] = site1;
+                            coor2idx(i,     j - 1, k,     1, 2, site1); idx[4] = site1;
+                            idx[3] = site0 + 8;                                        // i,   j,   k,   2, 2
+                            idx[5] = idx[4] + 8;                                      // i,   j-1, k,   3, 2
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k,     3, 2, site1); idx[0] = site1;
+                            coor2idx(i - 1, j + 1, k,     2, 2, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 2, site1); idx[4] = site1;
+                            idx[3] = site0 + 4;                                        // i,   j,   k,   2, 2
+                            idx[5] = idx[4] + 12;                                     // i,   j,   k+1, 3, 2
+                            break;
+                        case 2:
+                            coor2idx(i + 1, j - 1, k,     1, 2, site1); idx[0] = site1;
+                            coor2idx(i,     j - 1, k + 1, 3, 2, site1); idx[1] = site1;
+                            coor2idx(i + 1, j,     k + 1, 0, 2, site1); idx[2] = site1;
+                            idx[3] = site0 - 8;                                        // i,   j,   k,   0, 2
+                            idx[4] = site0 - 4;                                        // i,   j,   k,   1, 2
+                            idx[5] = site0 + 4;                                        // i,   j,   k,   3, 2
+                            break;
+                        case 3:
+                            coor2idx(i,     j,     k - 1, 1, 2, site1); idx[0] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 2, site1); idx[1] = site1;
+                            coor2idx(i,     j + 1, k,     0, 2, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k,     0, 2, site1); idx[4] = site1;
+                            idx[3] = site0 - 4;                                        // i,   j,   k,   2, 2
+                            idx[5] = idx[4] + 4;                                      // i+1, j,   k,   1, 2
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                case 3:
+                    switch (cell) {
+                        case 0:
+                            coor2idx(i - 1, j - 1, k,     3, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[1] = site1;
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j,     k - 1, 1, 3, site1); idx[4] = site1;
+                            idx[3] = site0 + 12;                                       // i,   j,   k,   3, 3
+                            idx[5] = idx[4] + 4;                                      // i,   j,   k-1, 2, 3
+                            break;
+                        case 1:
+                            coor2idx(i - 1, j,     k,     2, 3, site1); idx[0] = site1;
+                            coor2idx(i - 1, j,     k + 1, 3, 3, site1); idx[1] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[2] = site1;
+                            coor2idx(i,     j + 1, k,     0, 3, site1); idx[4] = site1;
+                            idx[3] = site0 + 8;                                        // i,   j,   k,   3, 3
+                            idx[5] = idx[4] + 8;                                      // i,   j+1, k,   2, 3
+                            break;
+                        case 2:
+                            coor2idx(i,     j - 1, k,     1, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j,     k + 1, 0, 3, site1); idx[1] = site1;
+                            coor2idx(i,     j - 1, k + 1, 3, 3, site1); idx[2] = site1;
+                            coor2idx(i + 1, j,     k,     0, 3, site1); idx[4] = site1;
+                            idx[3] = site0 + 4;                                        // i,   j,   k,   3, 3
+                            idx[5] = idx[4] + 4;                                      // i+1, j,   k,   1, 3
+                            break;
+                        case 3:
+                            coor2idx(i + 1, j,     k - 1, 1, 3, site1); idx[0] = site1;
+                            coor2idx(i,     j + 1, k - 1, 2, 3, site1); idx[1] = site1;
+                            coor2idx(i + 1, j + 1, k,     0, 3, site1); idx[2] = site1;
+                            idx[3] = site0 - 12;                                       // i,   j,   k,   0, 3
+                            idx[4] = site0 - 8;                                        // i,   j,   k,   1, 3
+                            idx[5] = site0 - 4;                                        // i,   j,   k,   2, 3
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                    }
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+        }
+    }
+
+    Vec<int> groups(int n_colors) {
+        n_colors = std::min(n_colors, n_sites);
+        if (n_colors%16 != 0) {
+            std::cerr << "n_colors=" << n_colors << " is not a multiple of 16\n";
+            std::exit(EXIT_FAILURE);
+        }
+        int c_len = int(cbrt(n_colors/16));
+        if (c_len*c_len*c_len != n_colors/16) {
+            std::cerr << "n_colors/16=" << n_colors/16 << " is not a perfect cube\n";
+            std::exit(EXIT_FAILURE);
+        }
+        if (lx % c_len != 0 || ly % c_len != 0 || lz % c_len != 0) {
+            std::cerr << "cbrt(n_colors/16)=" << c_len << " is not a divisor of lattice size (lx,ly,lz)=("
+                      << lx << "," << ly << "," << lz << ")\n";
+            std::exit(EXIT_FAILURE);
+        }
+        Vec<int> colors(n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            int x, y, z, cell, sub;
+            idx2coor(x, y, z, cell, sub, i);
+            int cx = x%c_len;
+            int cy = y%c_len;
+            int cz = z%c_len;
+            colors[i] = 16*(cx+(cy+cz*c_len)*c_len) + cell*4 + sub;
+        }
+        return colors_to_groups(colors);
+    }
+
+};
+std::unique_ptr<SimpleModel> SimpleModel::mk_pyrochlore_cubic(int lx, int ly, int lz) {
+    return std::make_unique<PyrochloreCubicModel>(lx, ly, lz);
+}

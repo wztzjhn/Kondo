@@ -261,3 +261,61 @@ std::unique_ptr<Dynamics> Dynamics::mk_glsd(double alpha, double dt) {
     return std::make_unique<GLSD>(alpha, dt);
 }
 
+
+class Metropolis : public Dynamics {
+public:
+    int n_substeps = 0;
+    
+    // dt is set to -1 (when n_substeps==0) or -10 (when n_substeps!=0).
+    // the purpose of using dt here is two-fold:
+    // 1. dt < 0 let other parts of the code know that dynamics is MC type;
+    // 2. tell if a full sweep is just finished (-1 v.s. -10).
+    Metropolis() { dt = -1.0; }
+    
+    void step(CalcForce const& calc_Ediff, fkpm::RNG& rng, Model& m) {
+        Vec<vec3>& s  = m.spin;
+        Vec<vec3>& sp = m.dyn_stor[0];
+        sp = s;
+        
+        int N = static_cast<int>(m.allow_update.size());
+        assert(N > 0 && N <= m.n_sites);
+        std::uniform_int_distribution<int> dist_int(0,N-1);                     // {0,1,2,...,N-1}
+        int site = m.allow_update[dist_int(rng)];
+        assert(site >= 0 && site < m.n_sites);
+        assert(m.spin_exist.empty() || m.spin_exist[site]);
+        
+        // generate a random spin in S^2 space, c.f. D. Landau's book
+        std::uniform_real_distribution<double> dist(0.0, 1.0);
+        double zeta1,zeta2;
+        double zeta_square = 10.0;
+        while (zeta_square >= 1.0) {
+            zeta1 = 1.0 - 2.0 * dist(rng);
+            zeta2 = 1.0 - 2.0 * dist(rng);
+            zeta_square = zeta1 * zeta1 + zeta2 * zeta2;
+        }
+        double zeta_sqrt = 2.0 * std::sqrt(1.0 - zeta_square);
+        vec3 s_new{zeta1 * zeta_sqrt, zeta2 * zeta_sqrt, (1.0 - 2.0 * zeta_square)};
+        sp[site] = s_new.normalized() * s[site].norm();
+        
+        double deltaE = calc_Ediff(s, sp);
+        using std::swap;
+        if (deltaE <= 0.0) {                                                    // always accept update
+            swap(s, sp);
+        } else if (dist(rng) < std::exp(-deltaE / m.kT())) {                    // probability: exp(-deltaE/T)
+            swap(s, sp);
+        }
+        
+        n_substeps++;
+        if (n_substeps >= N) {
+            n_substeps = 0;
+            n_steps++;
+            dt = -1.0;
+        } else {
+            dt = -10.0;
+        }
+        m.time = n_steps + static_cast<double>(n_substeps) / N;
+    }
+};
+std::unique_ptr<Dynamics> Dynamics::mk_metropolis() {
+    return std::make_unique<Metropolis>();
+}
